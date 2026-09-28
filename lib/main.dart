@@ -1,65 +1,20 @@
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_web_plugins/url_strategy.dart';
 
-import 'Model/FirebaseUser.dart';
-import 'Screens/Wrapper.dart';
-import 'Services/Auth.dart';
+import 'app/app.dart';
+import 'firebase_options.dart';
 
-void main() {
-  runApp(MyApp());
-}
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  // Clean web URLs (/projects instead of /#/projects).
+  usePathUrlStrategy();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  // Wait for any saved session to be restored, so the first route is resolved
+  // with the correct signed-in state instead of flashing the login page.
+  await FirebaseAuth.instance.authStateChanges().first;
 
-class MyApp extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return StreamProvider<FirebaseUser>.value(
-      value: AuthService().user,
-      initialData: null,
-      child: MaterialApp(
-        title: 'Taskly',
-        debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          primaryColor: Color.fromRGBO(84, 69, 141, 1),
-          accentColor: Color.fromRGBO(18, 130, 162, 1),
-          textTheme: GoogleFonts.montserratTextTheme(
-            TextTheme(
-              headline4: TextStyle(
-                fontSize: 24.0,
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-              ),
-              headline5: TextStyle(
-                fontSize: 24.0,
-                fontWeight: FontWeight.w500,
-                color: Colors.white,
-              ),
-              headline6: TextStyle(
-                fontSize: 20.0,
-                fontWeight: FontWeight.w400,
-                color: Colors.white,
-              ),
-              bodyText1: TextStyle(
-                  fontSize: 16.0,
-                  fontWeight: FontWeight.normal,
-                  color: Colors.white),
-              bodyText2: TextStyle(
-                  fontSize: 14.0,
-                  fontWeight: FontWeight.normal,
-                  color: Colors.white),
-              subtitle2: TextStyle(
-                  fontSize: 10.0,
-                  fontWeight: FontWeight.normal,
-                  color: Colors.white70),
-              button: TextStyle(
-                fontSize: 16.0,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-        ),
-        home: Wrapper(),
-      ),
-    );
-  }
+  runApp(const ProviderScope(child: TasklyApp()));
 }
