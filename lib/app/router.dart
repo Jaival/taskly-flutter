@@ -10,6 +10,7 @@ import '../features/auth/presentation/sign_up_page.dart';
 import '../features/home/presentation/home_page.dart';
 import '../features/landing/presentation/landing_page.dart';
 import '../features/profile/presentation/profile_page.dart';
+import '../features/projects/presentation/project_detail_page.dart';
 import '../features/projects/presentation/projects_page.dart';
 import '../features/sharing/presentation/shared_page.dart';
 import '../features/tasks/presentation/tasks_page.dart';
@@ -23,6 +24,7 @@ abstract final class Routes {
 
   static const home = '/home';
   static const projects = '/projects';
+  static String project(String id) => '/projects/$id';
   static const tasks = '/tasks';
   static const shared = '/shared';
   static const profile = '/profile';
@@ -59,11 +61,25 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const ProfilePage(),
       ),
       StatefulShellRoute.indexedStack(
-        builder: (context, state, navigationShell) =>
-            AppShell(navigationShell: navigationShell),
+        builder: (context, state, navigationShell) => AppShell(
+          navigationShell: navigationShell,
+          // Nested pages like /projects/:id bring their own app bar with a
+          // back button.
+          showAppBar: state.uri.pathSegments.length <= 1,
+        ),
         branches: [
           _branch(Routes.home, const HomePage()),
-          _branch(Routes.projects, const ProjectsPage()),
+          _branch(
+            Routes.projects,
+            const ProjectsPage(),
+            routes: [
+              GoRoute(
+                path: ':id',
+                builder: (context, state) =>
+                    ProjectDetailPage(projectId: state.pathParameters['id']!),
+              ),
+            ],
+          ),
           _branch(Routes.tasks, const TasksPage()),
           _branch(Routes.shared, const SharedPage()),
         ],
@@ -78,8 +94,14 @@ final routerProvider = Provider<GoRouter>((ref) {
   return router;
 });
 
-StatefulShellBranch _branch(String path, Widget page) => StatefulShellBranch(
-  routes: [GoRoute(path: path, builder: (context, state) => page)],
+StatefulShellBranch _branch(
+  String path,
+  Widget page, {
+  List<RouteBase> routes = const [],
+}) => StatefulShellBranch(
+  routes: [
+    GoRoute(path: path, builder: (context, state) => page, routes: routes),
+  ],
 );
 
 /// Sends signed-out users to the login page, remembering where they were

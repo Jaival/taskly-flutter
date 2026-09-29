@@ -156,10 +156,12 @@ Legacy: `Screens/Profile.dart`, `Widgets/Profile`, `Model/UserData.dart`
 ### 3.3 Projects
 Legacy: `Screens/Projects.dart`, `Widgets/Project/*`, `Shared/CustomProjectTile.dart`, `Model/ProjectModel.dart`
 
-- [ ] Responsive project grid (`SliverGrid` with `maxCrossAxisExtent`) instead of fixed 200px horizontal lists.
-- [ ] Create/edit in the adaptive dialog or sheet, with one primary action instead of Create/Update/Delete buttons shown at once.
-- [ ] Delete from an overflow menu, with a confirmation and an "Undo" snackbar. Delete the project's tasks with a one-time `get()` + `WriteBatch`. The old code used a live listener that never stopped and kept deleting tasks created later with the same project ID.
-- [ ] Project detail page at `/projects/:id` listing its tasks.
+- [x] Responsive project grid (`SliverGrid` with `maxCrossAxisExtent`) instead of fixed 200px horizontal lists.
+- [x] Create/edit in the adaptive dialog or sheet, with one primary action instead of Create/Update/Delete buttons shown at once.
+- [x] Delete from an overflow menu, with a confirmation and an "Undo" snackbar. Delete the project's tasks with a one-time `get()` + `WriteBatch`. The old code used a live listener that never stopped and kept deleting tasks created later with the same project ID.
+  - The project is hidden at once but only deleted when the snackbar closes without Undo, since the rules (rightly) don't allow re-creating a project with its members.
+- [x] Project detail page at `/projects/:id` listing its tasks. Unknown IDs and projects you're not in both show "Project not found".
+- [x] The menu adapts to the role: owners can edit and delete, editors can edit, viewers see no menu.
 
 ### 3.4 Tasks
 Legacy: `Screens/Tasks.dart`, `Widgets/Tasks/*`, `Shared/CustomTile.dart`, `Shared/CustomNoTask.dart`, `Model/TaskModel.dart`

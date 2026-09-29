@@ -23,9 +23,16 @@ const List<_Destination> _destinations = [
 /// Signed-in layout. The navigation adapts to the window width:
 /// bottom bar on phones, rail on tablets, permanent drawer on desktop.
 class AppShell extends StatelessWidget {
-  const AppShell({super.key, required this.navigationShell});
+  const AppShell({
+    super.key,
+    required this.navigationShell,
+    this.showAppBar = true,
+  });
 
   final StatefulNavigationShell navigationShell;
+
+  /// False on nested pages, which show their own app bar.
+  final bool showAppBar;
 
   void _onSelect(int index) => navigationShell.goBranch(
     index,
@@ -43,13 +50,15 @@ class AppShell extends StatelessWidget {
         Expanded(child: navigationShell),
       ],
     );
-    final appBar = AppBar(
-      title: Text(_destinations[selected].label),
-      actions: const [
-        _AccountMenu(),
-        SizedBox(width: AppSpacing.sm),
-      ],
-    );
+    final appBar = !showAppBar
+        ? null
+        : AppBar(
+            title: Text(_destinations[selected].label),
+            actions: const [
+              _AccountMenu(),
+              SizedBox(width: AppSpacing.sm),
+            ],
+          );
 
     if (width < Breakpoints.medium) {
       return Scaffold(

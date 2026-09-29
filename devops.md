@@ -369,6 +369,8 @@ The logic is a **pure function**, `authRedirect()`: no widgets, no Firebase, jus
 
 **`StatefulShellRoute.indexedStack`.** The four main tabs (Home, Projects, Tasks, Shared) are *branches* of a shell. Each branch keeps its own navigation stack alive in an `IndexedStack`, so if you scroll down Projects, switch to Tasks and come back, your scroll position is still there. `AppShell` wraps all of them with the navigation UI.
 
+**Nested routes.** A project's page, `/projects/:id`, is a child `GoRoute` of the projects branch (`path: ':id'`), and `state.pathParameters['id']` holds the ID. Because it lives *inside* the branch, the navigation bar stays visible and the Projects tab stays selected. The shell hides its own app bar on nested pages (`showAppBar: state.uri.pathSegments.length <= 1`), because the detail page brings its own with a back button. That back button pops if there's something to pop, and otherwise goes to `/projects`. The second case happens when you opened the page from a link or a refresh on the web.
+
 ### 5.4 Responsive layout
 
 [`lib/app/app_shell.dart`](lib/app/app_shell.dart) picks the navigation style from the window width, using the Material 3 "window size classes" in `Breakpoints` (`lib/app/theme/app_spacing.dart`):
@@ -432,6 +434,23 @@ This traces one user action through every piece above.
 Notice that no page contains "if signed out, go to login" code. Pages don't know auth exists; the router handles it in one place. v1 needed a `Wrapper` widget for this.
 
 **Why the router doesn't `watch` `authStateProvider`.** It would feel natural to write `ref.watch(authStateProvider)` inside `routerProvider`. But then every sign-in or sign-out would re-run the provider, building a brand-new `GoRouter` and throwing away the navigation stack and every tab's state. Instead the router is created once, and auth changes reach it through `refreshListenable`. The general rule: a provider that creates a long-lived object (a router, a controller, a connection) should only `watch` things that really require a new object.
+
+### 5.9 Deleting with Undo
+
+A confirmation dialog stops accidents, but an **Undo** snackbar is kinder, and the app offers both for projects (`projects/presentation/project_deletion.dart`):
+
+1. The user confirms. The project's ID goes into `pendingProjectDeletionsProvider`, and the lists and detail page hide anything in that set. Nothing is deleted yet.
+2. A snackbar shows "Deleted "Launch"." with **Undo** for six seconds.
+3. `await snackBar.closed` says why it closed. If the reason is `SnackBarClosedReason.action`, Undo was pressed, so the ID is removed from the set and the project reappears. If it closed any other way, the delete really runs.
+
+Why not delete straight away and re-create the project on Undo? Because the rules (rightly) refuse to create a project that already has other members, or one whose `createdAt` isn't now. Waiting is simpler and always correct.
+
+Three details:
+
+- **Capture before the gap.** The `ScaffoldMessenger`, the repository and the notifier are read *before* the snackbar shows. If you delete from the detail page, that page is gone six seconds later and its `ref` and `context` can't be used any more.
+- **`persist: false`.** In current Flutter, a snackbar with an action stays open until it's dismissed, for accessibility. This one must close on its own, because closing is what confirms the delete.
+- **Tests fast-forward time.** `tester.pump(const Duration(seconds: 7))` lets the snackbar time out without the test waiting seven real seconds.
+
 
 ---
 
@@ -669,7 +688,7 @@ Two things surprise almost everyone:
 
 ### Subcollections are not deleted with their parent
 
-Deleting `projects/abc` does **not** delete `projects/abc/tasks/*`. The orphaned tasks stay, invisible but still stored. The repository's `delete()` must remove the tasks first (in batches), or a Cloud Function can clean up later.
+Deleting `projects/abc` does **not** delete `projects/abc/tasks/*`. The orphaned tasks stay, invisible but still stored. `ProjectRepository.deleteProject()` fetches the tasks once and deletes them in batches of up to 500 (Firestore's limit per batch), then deletes the project. The order matters: the rules check the parent project to decide who may delete a task, so once the project is gone nobody can. A Cloud Function could do this on the server instead, but that needs the paid plan.
 
 ### Real-time listeners
 
