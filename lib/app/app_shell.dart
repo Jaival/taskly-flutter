@@ -44,12 +44,7 @@ class AppShell extends StatelessWidget {
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
     final selected = navigationShell.currentIndex;
-    final body = Column(
-      children: [
-        const VerifyEmailBanner(),
-        Expanded(child: navigationShell),
-      ],
-    );
+    final body = VerifyEmailBanner(child: navigationShell);
     final appBar = !showAppBar
         ? null
         : AppBar(

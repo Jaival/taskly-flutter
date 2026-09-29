@@ -2,12 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/auth_repository.dart';
+import '../domain/app_user.dart';
 import '../domain/auth_failure.dart';
 
-/// Reminds signed-in users to verify their email. Invites are addressed to
-/// an email, so the security rules only let verified users accept them.
+/// Reminds signed-in users to verify their email, in a banner above
+/// [child]. Invites are addressed to an email, so the security rules only let
+/// verified users accept them.
 class VerifyEmailBanner extends ConsumerStatefulWidget {
-  const VerifyEmailBanner({super.key});
+  const VerifyEmailBanner({super.key, required this.child});
+
+  /// The page below the banner.
+  final Widget child;
 
   @override
   ConsumerState<VerifyEmailBanner> createState() => _VerifyEmailBannerState();
@@ -36,8 +41,31 @@ class _VerifyEmailBannerState extends ConsumerState<VerifyEmailBanner> {
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(authStateProvider).value;
-    if (user == null || user.emailVerified) return const SizedBox.shrink();
+    final show = user != null && !user.emailVerified;
 
+    // The same widgets either way, so verifying doesn't rebuild the page.
+    return Column(
+      children: [
+        // With no app bar above it (nested pages bring their own), the
+        // banner is at the top of the screen and must clear the status bar.
+        // The page below then shouldn't leave room for it again.
+        SafeArea(
+          top: show,
+          bottom: false,
+          child: show ? _banner(user) : const SizedBox(width: double.infinity),
+        ),
+        Expanded(
+          child: MediaQuery.removePadding(
+            context: context,
+            removeTop: show,
+            child: widget.child,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _banner(AppUser user) {
     return MaterialBanner(
       leading: const Icon(Icons.mark_email_unread_outlined),
       content: Text(
