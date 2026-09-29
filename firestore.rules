@@ -1,0 +1,354 @@
+rules_version = '2';
+
+// Security rules for Taskly. These are the real access control: anyone can
+// call Firestore with the app's public config, so every read and write is
+// checked here on Google's servers.
+//
+// Tests: rules_test/ (run with `npm test` in that folder, see devops.md).
+//
+// Rules are evaluated per request. A query is allowed only if *every*
+// document it could return passes `allow read`, so queries must carry the
+// same conditions as the rules (e.g. `memberIds array-contains uid`).
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------------------------------------------------------------- helpers
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function uid() {
+      return request.auth.uid;
+    }
+
+    // The caller's email, only if they've verified it. Invites are addressed
+    // to an email, so an unverified address must never be able to claim one.
+    function verifiedEmail() {
+      return request.auth.token.email_verified == true
+          ? request.auth.token.email.lower()
+          : null;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function changedKeys() {
+      return incoming().diff(resource.data).affectedKeys();
+    }
+
+    function isValidPriority(value) {
+      return value in ['immediate', 'high', 'medium', 'low'];
+    }
+
+    function isValidStatus(value) {
+      return value in ['notStarted', 'inProgress', 'complete'];
+    }
+
+    function isOptionalString(value, maxSize) {
+      return value == null || (value is string && value.size() <= maxSize);
+    }
+
+    // Clients must write timestamps with FieldValue.serverTimestamp(), so
+    // they equal request.time. Device clocks can't be trusted.
+    function hasCreateTimestamps() {
+      return incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+    }
+
+    // createdAt may also be re-stamped with the server time: a document
+    // edited while its creation was still pending (offline) has no local
+    // createdAt yet, so the app sends a new server timestamp.
+    function hasUpdateTimestamps() {
+      return (incoming().createdAt == resource.data.createdAt
+              || incoming().createdAt == request.time)
+          && incoming().updatedAt == request.time;
+    }
+
+    function projectPath(projectId) {
+      return /databases/$(database)/documents/projects/$(projectId);
+    }
+
+    function invitePath(inviteId) {
+      return /databases/$(database)/documents/invites/$(inviteId);
+    }
+
+    // ------------------------------------------------------------------ users
+
+    match /users/{userId} {
+      function isValidUser(data) {
+        return data.keys().hasOnly(
+                 ['displayName', 'email', 'photoUrl', 'createdAt', 'updatedAt'])
+            && data.displayName is string
+            && data.displayName.size() <= 100
+            && data.email == request.auth.token.email
+            && isOptionalString(data.get('photoUrl', null), 2000);
+      }
+
+      // Any signed-in user may read one profile by ID (to show a teammate's
+      // name), but nobody may list the collection, which would expose every
+      // user's email.
+      allow get: if signedIn();
+      allow list: if false;
+
+      allow create: if signedIn() && userId == uid()
+          && isValidUser(incoming())
+          && hasCreateTimestamps();
+      allow update: if signedIn() && userId == uid()
+          && isValidUser(incoming())
+          && hasUpdateTimestamps();
+      allow delete: if signedIn() && userId == uid();
+    }
+
+    // --------------------------------------------------------------- projects
+
+    match /projects/{projectId} {
+      function isMember() {
+        return signedIn() && uid() in resource.data.memberIds;
+      }
+
+      function isOwner() {
+        return signedIn() && resource.data.ownerId == uid();
+      }
+
+      function canEdit() {
+        return isMember()
+            && resource.data.roles.get(uid(), '') in ['owner', 'editor'];
+      }
+
+      // Shape and invariants every stored project must satisfy.
+      function isValidProject(data) {
+        return data.keys().hasOnly(['ownerId', 'name', 'description',
+                 'priority', 'status', 'memberIds', 'roles', 'createdAt',
+                 'updatedAt'])
+            && data.name is string
+            && data.name.size() > 0 && data.name.size() <= 100
+            && data.description is string && data.description.size() <= 2000
+            && isValidPriority(data.priority)
+            && isValidStatus(data.status)
+            && data.memberIds is list
+            && data.memberIds.size() <= 50
+            && data.roles is map
+            // memberIds and roles hold exactly the same users, no duplicates.
+            && data.memberIds.toSet().size() == data.memberIds.size()
+            && data.memberIds.toSet() == data.roles.keys().toSet()
+            // Exactly one owner, and it's ownerId. Everyone else is an editor
+            // or viewer.
+            && data.roles.get(data.ownerId, '') == 'owner'
+            && data.roles.values().removeAll(['editor', 'viewer']) == ['owner'];
+      }
+
+      // Editors change the content; members and roles stay the same.
+      function isContentEdit() {
+        return canEdit()
+            && !changedKeys().hasAny(['ownerId', 'memberIds', 'roles'])
+            && isValidProject(incoming())
+            && hasUpdateTimestamps();
+      }
+
+      // The owner may also remove members and change roles, but can't add
+      // people directly (that's what invites are for) or transfer ownership.
+      function isOwnerEdit() {
+        return isOwner()
+            && incoming().ownerId == resource.data.ownerId
+            && resource.data.memberIds.hasAll(incoming().memberIds)
+            && isValidProject(incoming())
+            && hasUpdateTimestamps();
+      }
+
+      // An invitee adds themselves, with the role from their invite, in the
+      // same batch that marks the invite accepted. get() sees the invite
+      // before the batch, getAfter() after it, so each invite works once.
+      function isJoiningWithInvite() {
+        let inviteId = projectId + '_' + verifiedEmail();
+        let invite = get(invitePath(inviteId)).data;
+        let roleChange = incoming().roles.diff(resource.data.roles);
+        return signedIn()
+            && verifiedEmail() != null
+            && invite.status == 'pending'
+            && getAfter(invitePath(inviteId)).data.status == 'accepted'
+            && changedKeys().hasOnly(['memberIds', 'roles', 'updatedAt'])
+            && roleChange.addedKeys() == [uid()].toSet()
+            && roleChange.changedKeys().size() == 0
+            && roleChange.removedKeys().size() == 0
+            && incoming().roles[uid()] == invite.role
+            && incoming().memberIds == resource.data.memberIds.concat([uid()])
+            && incoming().memberIds.size() <= 50
+            && incoming().updatedAt == request.time;
+      }
+
+      // Any member except the owner may leave.
+      function isLeaving() {
+        let roleChange = incoming().roles.diff(resource.data.roles);
+        return isMember()
+            && !isOwner()
+            && changedKeys().hasOnly(['memberIds', 'roles', 'updatedAt'])
+            && roleChange.removedKeys() == [uid()].toSet()
+            && roleChange.addedKeys().size() == 0
+            && roleChange.changedKeys().size() == 0
+            && incoming().memberIds.toSet()
+                 == resource.data.memberIds.toSet().difference([uid()].toSet())
+            && incoming().updatedAt == request.time;
+      }
+
+      allow read: if isMember();
+
+      allow create: if signedIn()
+          && incoming().ownerId == uid()
+          && incoming().memberIds == [uid()]
+          && isValidProject(incoming())
+          && hasCreateTimestamps();
+
+      allow update: if isContentEdit()
+          || isOwnerEdit()
+          || isJoiningWithInvite()
+          || isLeaving();
+
+      // Firestore doesn't delete subcollections with their parent, so the
+      // app must delete the project's tasks first.
+      allow delete: if isOwner();
+
+      // ------------------------------------------------------- project tasks
+
+      match /tasks/{taskId} {
+        function project() {
+          return get(projectPath(projectId)).data;
+        }
+
+        function isProjectMember() {
+          return signedIn() && uid() in project().memberIds;
+        }
+
+        function canEditProject() {
+          return isProjectMember()
+              && project().roles.get(uid(), '') in ['owner', 'editor'];
+        }
+
+        function hasValidAssignee(data) {
+          return data.assigneeId == null
+              || data.assigneeId in project().memberIds;
+        }
+
+        allow read: if isProjectMember();
+
+        allow create: if canEditProject()
+            && incoming().ownerId == uid()
+            && isValidTask(incoming())
+            && hasValidAssignee(incoming())
+            && hasCreateTimestamps();
+
+        // Editors can change anything but the creator. Viewers can only move
+        // their own assigned tasks through the workflow.
+        allow update: if (
+              canEditProject()
+              && incoming().ownerId == resource.data.ownerId
+              && isValidTask(incoming())
+              && hasValidAssignee(incoming())
+              && hasUpdateTimestamps()
+            ) || (
+              isProjectMember()
+              && resource.data.assigneeId == uid()
+              && changedKeys().hasOnly(['status', 'updatedAt'])
+              && isValidStatus(incoming().status)
+              && incoming().updatedAt == request.time
+            );
+
+        allow delete: if canEditProject();
+      }
+    }
+
+    // Shape every stored task must satisfy, personal or in a project.
+    function isValidTask(data) {
+      return data.keys().hasOnly(['ownerId', 'title', 'description',
+               'priority', 'status', 'assigneeId', 'dueDate', 'order',
+               'createdAt', 'updatedAt'])
+          && data.title is string
+          && data.title.size() > 0 && data.title.size() <= 200
+          && data.description is string && data.description.size() <= 5000
+          && isValidPriority(data.priority)
+          && isValidStatus(data.status)
+          && (data.get('assigneeId', null) == null
+              || data.assigneeId is string)
+          && (data.get('dueDate', null) == null || data.dueDate is timestamp)
+          && data.order is number;
+    }
+
+    // --------------------------------------------------------- personal tasks
+
+    match /tasks/{taskId} {
+      function isOwnTask(data) {
+        return signedIn() && data.ownerId == uid();
+      }
+
+      allow read, delete: if isOwnTask(resource.data);
+
+      allow create: if isOwnTask(incoming())
+          && isValidTask(incoming())
+          && incoming().get('assigneeId', null) in [null, uid()]
+          && hasCreateTimestamps();
+
+      allow update: if isOwnTask(resource.data)
+          && isOwnTask(incoming())
+          && isValidTask(incoming())
+          && incoming().get('assigneeId', null) in [null, uid()]
+          && hasUpdateTimestamps();
+    }
+
+    // ---------------------------------------------------------------- invites
+
+    match /invites/{inviteId} {
+      function isInvitee(data) {
+        return signedIn() && verifiedEmail() == data.email;
+      }
+
+      function ownsProject(projectId) {
+        return get(projectPath(projectId)).data.ownerId == uid();
+      }
+
+      // A fresh (or renewed) invite from the project's owner. The ID must be
+      // "{projectId}_{email}", which is what lets isJoiningWithInvite() find
+      // it, and means one invite per person per project.
+      function isValidNewInvite() {
+        let data = incoming();
+        return signedIn()
+            && data.keys().hasOnly(['projectId', 'projectName', 'email',
+                 'role', 'invitedBy', 'status', 'createdAt'])
+            && data.projectId is string
+            && data.email is string
+            && data.email == data.email.lower()
+            && data.email.matches('[^@\\s]+@[^@\\s]+')
+            && inviteId == data.projectId + '_' + data.email
+            && data.projectName is string && data.projectName.size() <= 100
+            && data.role in ['editor', 'viewer']
+            && data.status == 'pending'
+            && data.invitedBy == uid()
+            && data.createdAt == request.time
+            && ownsProject(data.projectId);
+      }
+
+      // The inviter can see what they sent; the invitee can see what they
+      // received (query with `email == their verified email`).
+      allow read: if signedIn()
+          && (resource.data.invitedBy == uid() || isInvitee(resource.data));
+
+      allow create: if isValidNewInvite();
+
+      // Re-inviting someone overwrites their old invite. The invitee may
+      // accept or decline a pending invite, and change nothing else.
+      allow update: if isValidNewInvite()
+          || (
+            isInvitee(resource.data)
+            && resource.data.status == 'pending'
+            && changedKeys().hasOnly(['status'])
+            && incoming().status in ['accepted', 'declined']
+          );
+
+      allow delete: if signedIn()
+          && (resource.data.invitedBy == uid()
+              || isInvitee(resource.data)
+              || ownsProject(resource.data.projectId));
+    }
+  }
+}

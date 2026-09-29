@@ -108,18 +108,25 @@ The old schema (`Projects/{uid}/userProjects`, `Tasks/{uid}/userTasks`, and a se
 users/{uid}                      displayName, email, photoUrl, createdAt
 projects/{projectId}             ownerId, memberIds[], roles{uid: role}, name, description,
                                  priority, status, createdAt, updatedAt
-projects/{projectId}/tasks/{id}  title, description, priority, status, assigneeId,
+projects/{projectId}/tasks/{id}  ownerId, title, description, priority, status, assigneeId,
                                  dueDate, order, createdAt, updatedAt
 tasks/{taskId}                   personal tasks: ownerId, plus the same fields as project tasks
-invites/{inviteId}               projectId, email, role, invitedBy, status, createdAt
+invites/{projectId}_{email}      projectId, projectName, email, role, invitedBy, status, createdAt
 ```
 
-- [ ] `enum Priority { immediate, high, medium, low }` and `enum TaskStatus { notStarted, inProgress, complete }` with `label` and `color` getters. These replace `DropDownData.dart` and the priority-colour `if/else` that was copy-pasted into 4+ files.
-- [ ] Immutable models with `fromFirestore`/`toFirestore`, used through Firestore `withConverter<T>()` so queries return typed objects. Use `freezed` + `json_serializable`, or plain Dart 3 classes if you'd rather avoid code generation.
-- [ ] Store IDs, never usernames, for ownership and assignment.
-- [ ] Write `firestore.rules` and commit it. A user can read a project if `request.auth.uid in resource.data.memberIds`, and only the owner or editors can write. Deploy with the Firebase CLI.
-- [ ] Add `firestore.indexes.json` for the composite queries you add later (filters plus sorting).
-- [ ] Set up the **Firebase Emulator Suite** (Auth + Firestore) for local development and tests, so nothing touches production data.
+- [x] `enum Priority { immediate, high, medium, low }` and `enum TaskStatus { notStarted, inProgress, complete }` with `label` getters and safe `fromName` parsing (`lib/core/domain/`). Colours come from the theme: `PriorityColors.of(priority)` and `colorScheme.statusColor(status)`. These replace `DropDownData.dart` and the priority-colour `if/else` that was copy-pasted into 4+ files.
+- [x] Immutable models (`Project`, `Task`, `Invite`, `UserProfile`) as plain Dart 3 classes, no code generation. Firestore converters live in each feature's `data/` folder and are used through `withConverter<T>()`, so queries return typed objects.
+- [x] Store IDs, never usernames, for ownership and assignment.
+- [x] Write `firestore.rules`: members read, owner/editors write, viewers update only the status of tasks assigned to them, invite-based joining that needs a verified email, server timestamps enforced. 42 tests in `rules_test/`, run in CI.
+- [x] Add `firestore.indexes.json` for the first composite queries (my projects by `updatedAt`, personal tasks by `order`). Add more as queries are written.
+- [x] Set up the **Firebase Emulator Suite** (Auth + Firestore). Run the app against it with `--dart-define=USE_FIREBASE_EMULATORS=true`.
+- [ ] **You:** deploy the rules and indexes to `taskly-9ef7d` with `firebase deploy --only firestore` (needs `firebase login`). Until then the real database has whatever rules it was created with.
+
+Notes for Phase 3:
+- Accepting an invite is one batch: set the invite to `accepted` **and** add yourself to the project's `memberIds` and `roles`. The rules reject the project write unless the same batch accepts the invite.
+- Sign-up must send a verification email, because invites only work for verified addresses.
+- Deleting a project must delete its `tasks` subcollection first; Firestore doesn't cascade.
+- A "tasks assigned to me across all projects" view needs a collection-group query plus a matching rule. That's deliberately left out until the Home rewrite needs it.
 
 ---
 
