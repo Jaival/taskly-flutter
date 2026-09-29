@@ -154,15 +154,21 @@ taskly-flutter/
 │   │   ├── app_shell.dart    ← responsive navigation around signed-in pages
 │   │   ├── not_found_page.dart
 │   │   └── theme/            ← colours, fonts, spacing tokens
-│   ├── core/                 ← reusable building blocks with no feature knowledge
+│   ├── core/                 ← building blocks shared by several features
+│   │   ├── domain/           ← Priority, TaskStatus (used by projects AND tasks)
+│   │   ├── data/             ← Firestore helpers, firestoreProvider, emulator switch
 │   │   └── widgets/          ← EmptyState, ErrorState, Skeleton, dialogs
 │   └── features/             ← one folder per product feature
 │       ├── auth/
 │       │   ├── domain/       ← plain Dart models (AppUser)
 │       │   ├── data/         ← talks to Firebase (AuthRepository)
 │       │   └── presentation/ ← screens and widgets (LoginPage, SignUpPage)
-│       ├── home/  landing/  profile/  projects/  sharing/  tasks/
+│       ├── projects/  tasks/  sharing/  profile/
+│       │   ├── domain/       ← Project, Task, Invite, UserProfile
+│       │   ├── data/         ← *_firestore.dart: typed collections + converters
 │       │   └── presentation/ ← placeholder pages for now
+│       └── home/  landing/
+│           └── presentation/
 ├── test/                     ← mirrors lib/ (test/app ↔ lib/app, etc.)
 │   └── helpers/              ← fakes and pumpApp(), shared by all tests
 ├── legacy/lib/               ← the v1 code, read-only reference, excluded from analysis
@@ -172,7 +178,11 @@ taskly-flutter/
 ├── pubspec.yaml              ← dependencies and app metadata
 ├── pubspec.lock              ← exact resolved versions (committed)
 ├── analysis_options.yaml     ← lint rules
-├── firebase.json             ← FlutterFire's record of which Firebase apps map to which platform
+├── firebase.json             ← Firebase CLI config: rules/index files, emulator ports, FlutterFire app IDs
+├── .firebaserc               ← which Firebase project the CLI talks to (taskly-9ef7d)
+├── firestore.rules           ← server-side security rules (section 11)
+├── firestore.indexes.json    ← composite indexes, deployed with the rules
+├── rules_test/               ← Node.js tests for firestore.rules, run against the emulator
 ├── ROADMAP.md                ← the plan
 └── devops.md                 ← this file
 ```
@@ -211,8 +221,29 @@ presentation  ──►  data  ──►  domain
 ### `app/` vs `core/` vs `features/`
 
 - `features/` knows about the product ("projects", "tasks").
-- `core/` knows nothing about the product. `EmptyState` could be copied into any app.
+- `core/` holds what several features share. `core/widgets` and `core/data` know nothing about the product (`EmptyState` could be copied into any app). `core/domain` is the exception: `Priority` and `TaskStatus` are product vocabulary, but both projects and tasks use them, and putting them in either feature would make the other depend on it.
 - `app/` is the glue that knows about *all* features (the router imports every page), so nothing in `features/` should import from `app/` except the theme and `Routes` constants.
+
+**Features may import each other's `domain/`, never their `data/` or `presentation/`.** `sharing` uses `ProjectRole` from `projects/domain`, which is fine: it's a plain value. If `sharing` imported `projects/data`, a change to how projects are stored could break invites.
+
+### Why models and Firestore code are separate files
+
+`Project` (in `domain/`) doesn't import Firestore. The conversion lives in `projects/data/project_firestore.dart`:
+
+```dart
+CollectionReference<Project> projectsCollection(FirebaseFirestore db) => db
+    .collection('projects')
+    .withConverter(fromFirestore: projectFromFirestore, toFirestore: projectToFirestore);
+```
+
+`withConverter` means every read from that collection returns a `Project`, never a raw `Map`, so typos in field names can only happen in one file. Things worth noticing in those converters:
+
+- **Defensive reads** (`core/data/firestore_fields.dart`). `data.string('name')` returns `''` if the field is missing or isn't a string. Firestore has no schema, so one malformed document shouldn't crash a whole list.
+- **Enums stored by name, parsed with a fallback.** `Priority.fromName('urgent')` gives `medium`, so an older app version won't crash on a value a newer version added.
+- **Timestamps from the server.** `updatedAt` is always `FieldValue.serverTimestamp()`. The rules reject anything else.
+- **Derived, not stored.** A task's `projectId` comes from its path (`projects/{id}/tasks/…`), so it can never disagree with where the task actually is.
+
+We chose hand-written classes over code generators like `freezed` and `json_serializable`. There are only four models, and Dart 3 patterns keep the parsing short. Generators pay off with dozens of models, at the cost of a build step and generated files to read around.
 
 ### Why is `legacy/` there?
 
@@ -387,7 +418,10 @@ Notice that no page contains "if signed out, go to login" code. Pages don't know
 
 ## 6. Testing
 
-Run everything with `flutter test`. The suite currently has 27 tests and runs in a few seconds.
+There are two test suites:
+
+- **Dart tests** (`test/`, 51 tests): run with `flutter test`. Takes a few seconds.
+- **Security rules tests** (`rules_test/`, 42 tests): run with `npm test` inside `rules_test/`. This starts the Firestore emulator, runs the tests, and stops it. See [section 11](#11-firestore-primer-read-before-phase-2).
 
 ### The testing pyramid
 
@@ -408,6 +442,9 @@ Run everything with `flutter test`. The suite currently has 27 tests and runs in
 | `test/app/router_test.dart` → `navigation` group | Widget | Deep links, sign-in continues to the target, sign-out, 404 |
 | `test/app/app_shell_test.dart` | Widget | Right nav widget at each width, tabs switch, profile back button |
 | `test/core/dialogs_test.dart` | Widget | Sheet vs dialog by width, confirm returns true/false |
+| `test/core/domain/enums_test.dart` | Unit | Enum parsing and fallbacks, one colour per priority |
+| `test/features/*/…_test.dart` (projects, tasks, sharing, profile) | Unit | Models, and converters round-tripping through `FakeFirebaseFirestore` (including malformed documents) |
+| `rules_test/firestore.test.js` | Integration | Every security rule, allowed *and* denied cases, against the real rules engine in the emulator |
 
 ### Fakes, not mocks
 
@@ -423,6 +460,23 @@ Run everything with `flutter test`. The suite currently has 27 tests and runs in
 4. Navigates to the requested URL and waits for animations to settle (`pumpAndSettle`).
 
 Because it pumps the *real* app with only the edges faked, these tests catch real wiring bugs, not just bugs in isolated widgets.
+
+### Testing security rules
+
+Rules are code, and the most dangerous code in the project: a mistake there leaks data, and nothing in the app would notice. So `rules_test/` checks each rule twice. One test proves the rule **allows** the intended action, and another proves it **denies** the attack (a stranger reading, a viewer editing, an invitee picking a better role…).
+
+```js
+test("an editor can't change roles", async () => {
+  await assertFails(updateDoc(doc(as('bob'), 'projects/p1'), {
+    'roles.carol': 'editor',
+    updatedAt: serverTimestamp(),
+  }));
+});
+```
+
+`as('bob')` gives a Firestore client signed in as Bob, and `seed()` writes starting data with the rules switched off. These tests are in JavaScript because Google's rules-testing library only exists for Node.js.
+
+**How do you know a test really guards a rule?** Delete the rule and run the tests: at least one should fail. This is *mutation testing*, done by hand. When `invite.status == 'pending'` was removed during Phase 2, the first version of "an invite works only once" still passed, because a different rule happened to block the same write. The test was fixed to isolate the case.
 
 ### Rule of thumb
 
@@ -479,7 +533,11 @@ Things that **are** secret and must never be committed: service account JSON fil
  │ → flutter analyze                     (lints, types)     │
  │ → flutter test                        (behaviour)        │
  └──────────────────────────┬──────────────────────────────┘
-                            │ only if check passed AND branch is main
+ ┌──────────────── job: rules (runs in parallel) ──────────┐
+ │ Java 21 + Node 24 → npm ci → npm test                   │
+ │ (Firestore emulator + 42 security rules tests)          │
+ └──────────────────────────┬──────────────────────────────┘
+                            │ only if BOTH passed AND branch is main
                             ▼
  ┌──────────────── job: deploy ────────────────────────────┐
  │ flutter build web --base-href /taskly-flutter/           │
@@ -495,7 +553,9 @@ Things that **are** secret and must never be committed: service account JSON fil
 - **`cache: true`:** reuses the Flutter SDK download between runs, which saves about a minute per run.
 - **`concurrency` + `cancel-in-progress`:** if you push twice quickly, the first run is cancelled instead of wasting minutes.
 - **`permissions: contents: read`** at the top, with `pages: write` only on the deploy job: the *principle of least privilege*. A compromised step in `check` can't publish anything.
-- **`needs: check`:** deploy only runs if every check passed.
+- **`needs: [check, rules]`:** deploy only runs if every check passed. `check` and `rules` run at the same time on separate machines, so the pipeline takes as long as the slower one.
+- **`actions/cache` for `~/.cache/firebase/emulators`:** the Firestore emulator is a large download; caching it makes the rules job much faster after the first run.
+- **`npm ci` (not `npm install`):** installs exactly what `package-lock.json` says and fails if it's out of date. It's the npm version of committing `pubspec.lock`.
 - **`dart format --set-exit-if-changed`:** fails if any file isn't formatted. Run `dart format lib test` before pushing.
 
 ### GitHub Pages specifics
@@ -612,14 +672,45 @@ Firestore bills per document **read, write and delete**, not per query or per me
 
 ### The Emulator Suite
 
-The Firebase CLI can run Auth and Firestore locally (`firebase emulators:start`), with a web UI to inspect data. Phase 2 points the app at it in debug builds:
+The Firebase CLI can run Auth and Firestore on your machine, with a web UI at http://localhost:4000 to browse data and users. You can wipe and re-seed data freely, test security rules, and never touch real users' data during development.
 
-```dart
-FirebaseAuth.instance.useAuthEmulator('localhost', 9099);
-FirebaseFirestore.instance.useFirestoreEmulator('localhost', 8080);
+**Requirements:** Java 21 or newer (the Firestore emulator is a Java program). Your default Java is 17, so use the JDK bundled with Android Studio for emulator commands:
+
+```powershell
+# PowerShell, once per terminal
+$env:JAVA_HOME = 'C:\Program Files\Android\Android Studio\jbr'
+$env:Path = "$env:JAVA_HOME\bin;$env:Path"
 ```
 
-That means you can wipe and re-seed data freely, test security rules, and never touch real users' data during development.
+**Terminal 1**, start the emulators (ports come from `firebase.json`):
+
+```powershell
+firebase emulators:start --only auth,firestore
+# add --import=emulator-data --export-on-exit to keep data between runs
+```
+
+**Terminal 2**, run the app against them:
+
+```powershell
+flutter run -d emulator-5554 --dart-define=USE_FIREBASE_EMULATORS=true
+```
+
+`--dart-define` sets a compile-time constant. `lib/core/data/firebase_emulators.dart` reads it with `bool.fromEnvironment`, and `main.dart` calls `connectToFirebaseEmulators()` right after `Firebase.initializeApp`, before anything else touches Firebase. Without the flag, the app uses the real project.
+
+**How the Android emulator reaches your PC.** Inside the Android emulator, `localhost` means the emulator itself. The host computer is `10.0.2.2`, and FlutterFire translates `localhost` to it automatically. For a physical phone, add `--dart-define=FIREBASE_EMULATOR_HOST=<your PC's LAN IP>` and start the emulators with `host: 0.0.0.0` in `firebase.json`. The emulators speak plain HTTP, which Android blocks by default, so `android/app/src/debug/AndroidManifest.xml` allows it for debug builds only.
+
+The rules tests use the project ID `demo-taskly`. Any ID starting with `demo-` tells the Firebase tools there is no real project behind it, so a mistake can't reach production.
+
+### Deploying the rules
+
+The rules in the repo do nothing until they're deployed:
+
+```powershell
+firebase login                      # once
+firebase deploy --only firestore    # rules + indexes to taskly-9ef7d
+```
+
+Always run the rules tests first. The Firebase console also has a "Rules Playground" for one-off checks, but the tests are the source of truth.
 
 ---
 
@@ -644,6 +735,10 @@ That means you can wipe and re-seed data freely, test security rules, and never 
 | CI fails at the format step | Code wasn't formatted | `dart format lib test`, then commit |
 | A widget test times out in `pumpAndSettle` | Something animates forever (`Skeleton`, a spinner), so it never "settles" | Use `tester.pump(const Duration(...))` instead |
 | Odd build errors after upgrading packages or Flutter | Stale build cache | `flutter clean && flutter pub get` |
+| `firebase-tools no longer supports Java version before 21` | Default `JAVA_HOME` is JDK 17 | Point `JAVA_HOME` at Android Studio's `jbr` folder for that terminal (section 11) |
+| Android build: `Could not close incremental caches … compileDebugKotlin` | Kotlin's incremental cache can't handle the project (`D:`) and pub cache (`C:`) being on different drives | Already fixed: `kotlin.incremental=false` in `android/gradle.properties` |
+| `Could not start Firestore Emulator, port taken` | An earlier emulator is still running (closing the terminal window doesn't always stop the Java process) | Stop emulators with Ctrl+C. Otherwise find the process with `netstat -ano \| findstr :8080` and end it in Task Manager |
+| App on the emulator can't reach the Firebase emulators | Emulators not running, or the app was started without the flag | Start them first; run with `--dart-define=USE_FIREBASE_EMULATORS=true` |
 
 ---
 
@@ -678,6 +773,13 @@ flutter clean && flutter pub get      # "have you tried turning it off and on ag
 # Firebase
 flutterfire configure                 # (re)generate lib/firebase_options.dart
 firebase login:list                   # which Google account the CLI uses
+firebase emulators:start --only auth,firestore      # local Firebase (needs Java 21+)
+flutter run --dart-define=USE_FIREBASE_EMULATORS=true   # app → local Firebase
+firebase deploy --only firestore      # publish rules + indexes
+
+# Security rules tests (in rules_test/)
+npm ci                                # first time, or after package-lock.json changes
+npm test                              # start emulator, run tests, stop it
 ```
 
 `pubspec.yaml` says what you *want* (`go_router: ^18.0.1` means "18.0.1 or newer, but below 19"). `pubspec.lock` records exactly what you *got*. Apps commit the lock file so every machine and CI builds with identical versions.

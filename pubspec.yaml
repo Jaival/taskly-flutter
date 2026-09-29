@@ -20,6 +20,7 @@ dependencies:
   google_fonts: ^8.2.1
 
 dev_dependencies:
+  fake_cloud_firestore: ^4.3.0
   flutter_lints: ^6.0.0
   flutter_test:
     sdk: flutter

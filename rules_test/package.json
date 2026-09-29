@@ -1,0 +1,18 @@
+{
+  "name": "taskly-rules-test",
+  "private": true,
+  "description": "Tests for firestore.rules, run against the Firestore emulator.",
+  "type": "module",
+  "scripts": {
+    "test": "firebase emulators:exec --only firestore --project demo-taskly \"node --test\"",
+    "test:only": "node --test"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
+    "firebase": "^12.19.0",
+    "firebase-tools": "^15.31.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

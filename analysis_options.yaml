@@ -8,6 +8,7 @@ analyzer:
     - web/**
     - windows/**
     - macos/**
+    - rules_test/**
     # Pre-null-safety v1 code, kept as a reference while features are rewritten.
     # Delete once Phase 3 of ROADMAP.md is complete.
     - legacy/**

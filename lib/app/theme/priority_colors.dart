@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../core/domain/priority.dart';
+
 /// Brand colours for task and project priorities, tuned for light and dark mode.
 ///
 /// Read with `Theme.of(context).extension<PriorityColors>()!`.
@@ -20,6 +22,14 @@ class PriorityColors extends ThemeExtension<PriorityColors> {
 
   /// Foreground colour for text and icons drawn on any priority colour.
   final Color onPriority;
+
+  /// The background colour for [priority].
+  Color of(Priority priority) => switch (priority) {
+    Priority.immediate => immediate,
+    Priority.high => high,
+    Priority.medium => medium,
+    Priority.low => low,
+  };
 
   static const light = PriorityColors(
     immediate: Color(0xFFF05D5E),
