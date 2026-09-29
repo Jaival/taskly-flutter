@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,7 +8,10 @@ import '../../../app/theme/app_spacing.dart';
 import '../../../core/forms/validators.dart';
 import '../../../core/widgets/form_error.dart';
 import '../../../core/widgets/progress_button.dart';
+import '../../profile/data/user_profile_repository.dart';
+import '../../profile/domain/user_profile.dart';
 import '../data/auth_repository.dart';
+import '../domain/app_user.dart';
 import '../domain/auth_failure.dart';
 import 'forgot_password_dialog.dart';
 import 'widgets/auth_layout.dart';
@@ -41,16 +45,41 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       _submitting = true;
       _error = null;
     });
+    // Read providers before awaiting: once signed in, the router leaves this
+    // page and `ref` can't be used any more.
+    final auth = ref.read(authRepositoryProvider);
+    final profiles = ref.read(userProfileRepositoryProvider);
     try {
-      await ref
-          .read(authRepositoryProvider)
-          .signIn(email: _email.text, password: _password.text);
-      // Offer to save the password. The router then leaves this page.
+      final user = await auth.signIn(
+        email: _email.text,
+        password: _password.text,
+      );
+      // Offer to save the password.
       TextInput.finishAutofillContext();
+      await _ensureProfile(profiles, user);
     } on AuthFailure catch (failure) {
       if (mounted) setState(() => _error = failure.message);
     } finally {
       if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  /// Repairs accounts whose profile wasn't created at sign-up (e.g. the
+  /// connection dropped). Failing here mustn't stop the user signing in.
+  static Future<void> _ensureProfile(
+    UserProfileRepository profiles,
+    AppUser user,
+  ) async {
+    try {
+      await profiles.ensureProfile(
+        UserProfile(
+          uid: user.uid,
+          displayName: user.displayName ?? '',
+          email: user.email ?? '',
+        ),
+      );
+    } on FirebaseException catch (e) {
+      debugPrint('Could not check profile for ${user.uid}: ${e.code}');
     }
   }
 

@@ -148,8 +148,10 @@ Legacy: `Services/Auth.dart`, `Screens/Login.dart`, `Screens/SignUp.dart`, `Widg
 ### 3.2 Profile
 Legacy: `Screens/Profile.dart`, `Widgets/Profile`, `Model/UserData.dart`
 
-- [ ] View and edit display name.
-- [ ] Sign out moves from the app bar into the shell (avatar menu).
+- [x] View and edit display name. Saves to both the `users/{uid}` profile (what teammates see) and the auth account (what the avatar shows).
+- [x] Sign out moves from the app bar into the shell (avatar menu), and is also on the profile page.
+- [x] Shows the email and whether it's verified, and "Change password" emails a reset link.
+- [x] Missing profiles repair themselves: logging in creates one if sign-up couldn't, and saving a name creates it too.
 
 ### 3.3 Projects
 Legacy: `Screens/Projects.dart`, `Widgets/Project/*`, `Shared/CustomProjectTile.dart`, `Model/ProjectModel.dart`
