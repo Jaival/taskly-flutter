@@ -318,6 +318,28 @@ describe('projects: delete', () => {
   });
 });
 
+describe('retried deletes', () => {
+  // The SDK retries a delete whose acknowledgement was lost. The retry must
+  // succeed, or the app rolls back its local delete and shows a ghost.
+  test('deleting a document that is already gone succeeds', async () => {
+    await assertSucceeds(deleteDoc(doc(as('alice'), 'projects/gone')));
+    await assertSucceeds(deleteDoc(doc(as('bob'), 'projects/p1/tasks/gone')));
+    await assertSucceeds(deleteDoc(doc(as('dave'), 'tasks/gone')));
+    await assertSucceeds(deleteDoc(doc(as('alice'), 'invites/gone')));
+  });
+
+  test("signed-out visitors still can't delete anything", async () => {
+    await assertFails(deleteDoc(doc(signedOut(), 'projects/gone')));
+    await assertFails(deleteDoc(doc(signedOut(), 'tasks/gone')));
+  });
+
+  test("an existing document still needs permission", async () => {
+    await assertFails(deleteDoc(doc(as('bob'), 'projects/p1')));
+    await assertFails(deleteDoc(doc(as('alice'), 'tasks/personal1')));
+    await assertFails(deleteDoc(doc(as('carol'), 'projects/p1/tasks/t1')));
+  });
+});
+
 describe('project tasks', () => {
   test('members can read tasks, others cannot', async () => {
     await assertSucceeds(getDocs(collection(as('carol'), 'projects/p1/tasks')));

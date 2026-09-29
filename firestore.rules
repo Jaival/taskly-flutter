@@ -35,6 +35,15 @@ service cloud.firestore {
       return request.resource.data;
     }
 
+    // Deleting a document that's already gone. The SDK retries a delete if
+    // the server's acknowledgement was lost, and by then the document no
+    // longer exists. Without this, the retry is denied (resource.data is
+    // null), and the app rolls back the delete and shows a document that
+    // isn't there. Allowing it reveals nothing and changes nothing.
+    function isAlreadyDeleted() {
+      return signedIn() && resource == null;
+    }
+
     function changedKeys() {
       return incoming().diff(resource.data).affectedKeys();
     }
@@ -208,7 +217,7 @@ service cloud.firestore {
 
       // Firestore doesn't delete subcollections with their parent, so the
       // app must delete the project's tasks first.
-      allow delete: if isOwner();
+      allow delete: if isAlreadyDeleted() || isOwner();
 
       // ------------------------------------------------------- project tasks
 
@@ -255,7 +264,7 @@ service cloud.firestore {
               && incoming().updatedAt == request.time
             );
 
-        allow delete: if canEditProject();
+        allow delete: if isAlreadyDeleted() || canEditProject();
       }
     }
 
@@ -282,7 +291,8 @@ service cloud.firestore {
         return signedIn() && data.ownerId == uid();
       }
 
-      allow read, delete: if isOwnTask(resource.data);
+      allow read: if isOwnTask(resource.data);
+      allow delete: if isAlreadyDeleted() || isOwnTask(resource.data);
 
       allow create: if isOwnTask(incoming())
           && isValidTask(incoming())
@@ -345,10 +355,11 @@ service cloud.firestore {
             && incoming().status in ['accepted', 'declined']
           );
 
-      allow delete: if signedIn()
-          && (resource.data.invitedBy == uid()
-              || isInvitee(resource.data)
-              || ownsProject(resource.data.projectId));
+      allow delete: if isAlreadyDeleted()
+          || (signedIn()
+              && (resource.data.invitedBy == uid()
+                  || isInvitee(resource.data)
+                  || ownsProject(resource.data.projectId)));
     }
   }
 }
