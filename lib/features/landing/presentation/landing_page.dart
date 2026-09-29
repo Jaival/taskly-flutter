@@ -10,12 +10,13 @@ class LandingPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // push, not go: Back from the login page should return here.
     return Scaffold(
       appBar: AppBar(
         title: const Text('Taskly'),
         actions: [
           TextButton(
-            onPressed: () => context.go(Routes.login),
+            onPressed: () => context.push(Routes.login),
             child: const Text('Log in'),
           ),
           const SizedBox(width: AppSpacing.sm),
@@ -43,7 +44,7 @@ class LandingPage extends StatelessWidget {
                 ),
                 const SizedBox(height: AppSpacing.xl),
                 FilledButton(
-                  onPressed: () => context.go(Routes.signUp),
+                  onPressed: () => context.push(Routes.signUp),
                   child: const Text('Get started'),
                 ),
               ],

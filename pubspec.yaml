@@ -21,9 +21,11 @@ dependencies:
 
 dev_dependencies:
   fake_cloud_firestore: ^4.3.0
+  firebase_auth_mocks: ^0.15.2
   flutter_lints: ^6.0.0
   flutter_test:
     sdk: flutter
+  mock_exceptions: ^0.8.2
 
 flutter:
   uses-material-design: true

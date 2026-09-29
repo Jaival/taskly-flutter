@@ -33,7 +33,7 @@ const _publicPaths = {Routes.landing, Routes.login, Routes.signUp};
 
 final routerProvider = Provider<GoRouter>((ref) {
   final auth = ref.watch(authRepositoryProvider);
-  final refresh = _StreamListenable(auth.authStateChanges());
+  final refresh = _StreamListenable(auth.userChanges());
 
   final router = GoRouter(
     initialLocation: Routes.landing,

@@ -1,9 +1,11 @@
+import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:taskly/app/app.dart';
 import 'package:taskly/app/router.dart';
 import 'package:taskly/app/theme/app_theme.dart';
+import 'package:taskly/core/data/firestore_provider.dart';
 import 'package:taskly/features/auth/data/auth_repository.dart';
 import 'package:taskly/features/auth/domain/app_user.dart';
 
@@ -13,6 +15,7 @@ const testUser = AppUser(
   uid: 'uid-1',
   email: 'ada@example.com',
   displayName: 'Ada Lovelace',
+  emailVerified: true,
 );
 
 TextTheme _defaultFont(TextTheme base) => base;
@@ -24,18 +27,22 @@ void setWindowSize(WidgetTester tester, Size size) {
   addTearDown(tester.view.reset);
 }
 
-/// Pumps the full app at [location] with a fake auth backend.
+/// Pumps the full app at [location] with fake auth and an in-memory
+/// Firestore. Pass [auth] or [firestore] to set them up or inspect them.
 Future<FakeAuthRepository> pumpApp(
   WidgetTester tester, {
   AppUser? user,
+  FakeAuthRepository? auth,
+  FakeFirebaseFirestore? firestore,
   String location = Routes.landing,
   Size size = const Size(400, 800),
 }) async {
   setWindowSize(tester, size);
-  final auth = FakeAuthRepository(currentUser: user);
+  final fakeAuth = auth ?? FakeAuthRepository(currentUser: user);
   final container = ProviderContainer(
     overrides: [
-      authRepositoryProvider.overrideWithValue(auth),
+      authRepositoryProvider.overrideWithValue(fakeAuth),
+      firestoreProvider.overrideWithValue(firestore ?? FakeFirebaseFirestore()),
       // Google Fonts would try to download fonts during tests.
       appThemeProvider.overrideWithValue(
         const AppTheme(textThemeBuilder: _defaultFont),
@@ -49,5 +56,5 @@ Future<FakeAuthRepository> pumpApp(
   );
   container.read(routerProvider).go(location);
   await tester.pumpAndSettle();
-  return auth;
+  return fakeAuth;
 }

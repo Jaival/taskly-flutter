@@ -224,7 +224,10 @@ presentation  ──►  data  ──►  domain
 - `core/` holds what several features share. `core/widgets` and `core/data` know nothing about the product (`EmptyState` could be copied into any app). `core/domain` is the exception: `Priority` and `TaskStatus` are product vocabulary, but both projects and tasks use them, and putting them in either feature would make the other depend on it.
 - `app/` is the glue that knows about *all* features (the router imports every page), so nothing in `features/` should import from `app/` except the theme and `Routes` constants.
 
-**Features may import each other's `domain/`, never their `data/` or `presentation/`.** `sharing` uses `ProjectRole` from `projects/domain`, which is fine: it's a plain value. If `sharing` imported `projects/data`, a change to how projects are stored could break invites.
+**A feature's public API is its `domain/` models and its repository provider.** Other features may use those, but never its `*_firestore.dart` files or its widgets. For example:
+
+- `sharing` uses `ProjectRole` from `projects/domain`. It's a plain value, so that's fine.
+- Sign-up (in `auth`) creates the user's profile through `userProfileRepositoryProvider` from `profile/data`. It never touches the `users` collection directly, so the profile feature stays free to change how profiles are stored.
 
 ### Why models and Firestore code are separate files
 
@@ -292,7 +295,7 @@ final authRepositoryProvider = Provider<AuthRepository>(
 
 // A live stream, exposed as AsyncValue (loading / data / error).
 final authStateProvider = StreamProvider<AppUser?>(
-  (ref) => ref.watch(authRepositoryProvider).authStateChanges(),
+  (ref) => ref.watch(authRepositoryProvider).userChanges(),
 );
 ```
 
@@ -398,13 +401,29 @@ Instead, values come from one of three places:
 - `IconButton(tooltip: 'Account')`: tooltips double as screen-reader labels, and tests find widgets by them (`find.byTooltip('Account')`).
 - `showAdaptiveSheet` pads the bottom sheet by `MediaQuery.viewInsetsOf(context).bottom` so the on-screen keyboard never covers form fields.
 
-### 5.7 Putting it together: what happens when you sign out
+### 5.7 Forms and async actions
+
+The login and sign-up pages (`lib/features/auth/presentation/`) show the pattern every form in the app follows:
+
+- **`ConsumerStatefulWidget`**, because the form owns state: text controllers, a "submitting" flag, and an error message. Controllers are created once as fields and disposed in `dispose()`. v1 created them inside `build()`, which wiped what you'd typed whenever anything rebuilt.
+- **Validate first, then submit.** `_formKey.currentState!.validate()` runs each field's `validator` (from `core/forms/validators.dart`) and shows messages under the fields. Nothing is sent until they pass.
+- **Errors the user can act on.** The repository turns `FirebaseAuthException` codes into an `AuthFailure` with a readable message (`auth/data/auth_failures.dart`). The page catches only `AuthFailure` and shows it in a `FormError`, which screen readers announce. v1 printed errors to the console and returned `null`.
+- **No double submits.** `ProgressButton` disables itself and shows a spinner while `_submitting` is true.
+- **`if (mounted)` after every `await`.** Signing in makes the router leave the page, so by the time the `await` returns the widget may be gone, and calling `setState` on it would throw. For the same reason, sign-up reads its providers and form values *before* the first `await`: `ref` and the controllers are unusable once the page is disposed.
+- **Autofill.** `AutofillGroup`, `autofillHints` and `TextInput.finishAutofillContext()` let password managers fill in and save logins.
+
+Two security details:
+
+- **"Forgot password" never says whether an account exists.** Both the message and the reset dialog read the same either way. Otherwise anyone could type emails in and learn who uses Taskly (*account enumeration*).
+- **Email verification** is needed for invites, because the rules match invites by email. The banner in the shell resends the email, and "I've verified" calls `reloadUser()`. That refreshes the ID token too, so the rules see `email_verified` straight away. This is also why the app listens to `userChanges()` rather than `authStateChanges()`: only `userChanges()` fires when the user's details change without signing in or out.
+
+### 5.8 Putting it together: what happens when you sign out
 
 This traces one user action through every piece above.
 
 1. You tap **Sign out** in the account menu. `_AccountMenu` calls `ref.read(authRepositoryProvider).signOut()`. It's `read`, not `watch`, because this is a callback.
 2. `AuthRepository.signOut()` calls Firebase, which clears the saved session.
-3. Firebase's `authStateChanges()` stream emits `null`. Two things are listening to it:
+3. Firebase's `userChanges()` stream emits `null`. Two things are listening to it:
    - `_StreamListenable` in `router.dart` calls `notifyListeners()`, which makes go_router re-run `redirect`.
    - `authStateProvider` updates, so any widget that `watch`es it rebuilds.
 4. `authRedirect(signedIn: false, uri: /projects)` returns `/login?from=/projects`, and go_router navigates there. The shell and its tabs are disposed.

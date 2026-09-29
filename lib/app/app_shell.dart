@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/auth/data/auth_repository.dart';
+import '../features/auth/presentation/verify_email_banner.dart';
 import 'router.dart';
 import 'theme/app_spacing.dart';
 
@@ -36,6 +37,12 @@ class AppShell extends StatelessWidget {
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
     final selected = navigationShell.currentIndex;
+    final body = Column(
+      children: [
+        const VerifyEmailBanner(),
+        Expanded(child: navigationShell),
+      ],
+    );
     final appBar = AppBar(
       title: Text(_destinations[selected].label),
       actions: const [
@@ -47,7 +54,7 @@ class AppShell extends StatelessWidget {
     if (width < Breakpoints.medium) {
       return Scaffold(
         appBar: appBar,
-        body: navigationShell,
+        body: body,
         bottomNavigationBar: NavigationBar(
           selectedIndex: selected,
           onDestinationSelected: _onSelect,
@@ -107,7 +114,7 @@ class AppShell extends StatelessWidget {
         children: [
           navigation,
           Expanded(
-            child: Scaffold(appBar: appBar, body: navigationShell),
+            child: Scaffold(appBar: appBar, body: body),
           ),
         ],
       ),

@@ -137,11 +137,13 @@ Rewrite in this order. Each feature is built end to end: repository → Riverpod
 ### 3.1 Auth
 Legacy: `Services/Auth.dart`, `Screens/Login.dart`, `Screens/SignUp.dart`, `Widgets/Login`, `Widgets/SignUp`, `Widgets/LeftSideLoginSignUp`, `Widgets/RightSideLoginSignUp`
 
-- [ ] `AuthRepository` and an auth-state provider that drives the router redirect.
-- [ ] A single centred login/sign-up card that works on mobile, with `Form` validation.
-- [ ] Show real error messages by mapping `FirebaseAuthException.code` ("wrong password", "email already in use"). The old code returned `null` and printed the error.
-- [ ] Create the `users/{uid}` document on sign-up.
-- [ ] Password reset (cheap to add while you're here).
+- [x] `AuthRepository` and an auth-state provider that drives the router redirect. It uses `userChanges()`, so the app also notices display-name changes and email verification.
+- [x] A single centred login/sign-up card that works on mobile, with `Form` validation, autofill hints for password managers, and a show/hide password toggle.
+- [x] Show real error messages by mapping `FirebaseAuthException.code` ("wrong password", "email already in use"). The old code returned `null` and printed the error.
+- [x] Create the `users/{uid}` document on sign-up.
+- [x] Password reset (cheap to add while you're here). The reply is the same whether or not the account exists.
+- [x] Send a verification email on sign-up, with a banner in the shell to resend it or re-check.
+- [x] Landing *pushes* the auth pages, so Back returns to it (on Android, Back used to close the app).
 
 ### 3.2 Profile
 Legacy: `Screens/Profile.dart`, `Widgets/Profile`, `Model/UserData.dart`
