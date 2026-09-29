@@ -6,6 +6,7 @@ import '../../../app/router.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/error_state.dart';
+import '../../../core/widgets/undo_delete.dart';
 import '../data/project_repository.dart';
 import '../domain/project.dart';
 import 'project_card.dart';
@@ -22,7 +23,7 @@ class ProjectsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final hidden = ref.watch(pendingProjectDeletionsProvider);
+    final hidden = ref.watch(pendingDeletionsProvider);
     final projects = ref.watch(projectsProvider);
 
     return Scaffold(
@@ -35,7 +36,7 @@ class ProjectsPage extends ConsumerWidget {
         AsyncData(:final value) => _ProjectGrid(
           projects: [
             for (final project in value)
-              if (!hidden.contains(project.id)) project,
+              if (!hidden.contains(projectDeletionKey(project.id))) project,
           ],
           onCreate: () => _create(context),
         ),

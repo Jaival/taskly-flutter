@@ -166,10 +166,13 @@ Legacy: `Screens/Projects.dart`, `Widgets/Project/*`, `Shared/CustomProjectTile.
 ### 3.4 Tasks
 Legacy: `Screens/Tasks.dart`, `Widgets/Tasks/*`, `Shared/CustomTile.dart`, `Shared/CustomNoTask.dart`, `Model/TaskModel.dart`
 
-- [ ] Personal tasks and project tasks share the same `TaskCard`, `PriorityChip` and `StatusChip` widgets.
-- [ ] Mark complete with a checkbox and a subtle animation.
-- [ ] Form controllers created in `initState` and disposed. The old forms set controller text inside `build()`, which wiped what you typed whenever a dropdown changed.
-- [ ] Validation: required title, and no `"null"` strings saved from empty dropdowns.
+- [x] Personal tasks and project tasks share the same `TaskCard`, `PriorityChip` and `StatusChip` widgets. Personal tasks are on `/tasks`; a project's tasks are on its page (`ProjectTaskList`).
+- [x] Mark complete with a checkbox and a subtle animation (the title fades and is struck through; no motion with "reduce motion" on). Completed tasks stay in place; sorting and filtering come in Phase 4.
+- [x] Form controllers created once with the form and disposed. The old forms set controller text inside `build()`, which wiped what you typed whenever a dropdown changed.
+- [x] Validation: required title, and no `"null"` strings saved from empty dropdowns (the shared `PriorityField`/`StatusField` always have a value).
+- [x] Delete with Undo and no confirmation (tasks are small). The undo mechanism moved to `core/widgets/undo_delete.dart` and projects use it too.
+- [x] Roles: viewers see no add, edit or delete, and can only tick off tasks assigned to them. Editing writes with `update()`, and ticking changes only `status`, which is all the rules let a viewer change.
+- Found while testing on a device: a delete retried after a lost acknowledgement was denied (the document was already gone), so the app rolled back and showed a ghost. The rules now allow deleting a document that doesn't exist (45 rules tests).
 
 ### 3.5 Home dashboard
 Legacy: `Screens/Home.dart`, `Widgets/Home/*`

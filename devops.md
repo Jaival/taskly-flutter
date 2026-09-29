@@ -224,10 +224,11 @@ presentation  ──►  data  ──►  domain
 - `core/` holds what several features share. `core/widgets` and `core/data` know nothing about the product (`EmptyState` could be copied into any app). `core/domain` is the exception: `Priority` and `TaskStatus` are product vocabulary, but both projects and tasks use them, and putting them in either feature would make the other depend on it.
 - `app/` is the glue that knows about *all* features (the router imports every page), so nothing in `features/` should import from `app/` except the theme and `Routes` constants.
 
-**A feature's public API is its `domain/` models and its repository provider.** Other features may use those, but never its `*_firestore.dart` files or its widgets. For example:
+**A feature's public API is its `domain/` models and its repository provider.** Other features may use those, but never its `*_firestore.dart` files. Widgets are private too, with one kind of exception: a widget built *for* another feature to embed. For example:
 
 - `sharing` uses `ProjectRole` from `projects/domain`. It's a plain value, so that's fine.
 - Sign-up (in `auth`) creates the user's profile through `userProfileRepositoryProvider` from `profile/data`. It never touches the `users` collection directly, so the profile feature stays free to change how profiles are stored.
+- The project page shows `ProjectTaskList` from `tasks/presentation`. It takes plain values (`projectId`, `uid`, `canEdit`), not a `Project`, so `tasks` doesn't depend on `projects`. Dependencies between features should point one way; if two features need each other, something belongs in `core/`.
 
 ### Why models and Firestore code are separate files
 
@@ -371,6 +372,11 @@ The logic is a **pure function**, `authRedirect()`: no widgets, no Firebase, jus
 
 **Nested routes.** A project's page, `/projects/:id`, is a child `GoRoute` of the projects branch (`path: ':id'`), and `state.pathParameters['id']` holds the ID. Because it lives *inside* the branch, the navigation bar stays visible and the Projects tab stays selected. The shell hides its own app bar on nested pages (`showAppBar: state.uri.pathSegments.length <= 1`), because the detail page brings its own with a back button. That back button pops if there's something to pop, and otherwise goes to `/projects`. The second case happens when you opened the page from a link or a refresh on the web.
 
+Two consequences of pages living inside a branch:
+
+- **Safe areas.** Without the shell's app bar, whatever is at the top of the body sits under the phone's status bar. `VerifyEmailBanner` wraps the page, so when it shows it takes the status-bar padding itself and removes it from the page below (`MediaQuery.removePadding`). Otherwise the page's own app bar would leave a second gap under the banner.
+- **Modals go on the root navigator.** `context` inside a branch belongs to that branch's `Navigator`. A bottom sheet opened there appears *inside* the tab, under the navigation bar, which stays tappable. `showAdaptiveSheet` passes `useRootNavigator: true` so sheets cover the whole app, as dialogs already do.
+
 ### 5.4 Responsive layout
 
 [`lib/app/app_shell.dart`](lib/app/app_shell.dart) picks the navigation style from the window width, using the Material 3 "window size classes" in `Breakpoints` (`lib/app/theme/app_spacing.dart`):
@@ -437,11 +443,11 @@ Notice that no page contains "if signed out, go to login" code. Pages don't know
 
 ### 5.9 Deleting with Undo
 
-A confirmation dialog stops accidents, but an **Undo** snackbar is kinder, and the app offers both for projects (`projects/presentation/project_deletion.dart`):
+A confirmation dialog stops accidents, but an **Undo** snackbar is kinder. Projects get both (a project takes its tasks with it); tasks get only Undo. Both use `deleteWithUndo()` from `core/widgets/undo_delete.dart`:
 
-1. The user confirms. The project's ID goes into `pendingProjectDeletionsProvider`, and the lists and detail page hide anything in that set. Nothing is deleted yet.
+1. The user confirms. The document's path (e.g. `projects/abc`) goes into `pendingDeletionsProvider`, and lists hide anything in that set. Nothing is deleted yet.
 2. A snackbar shows "Deleted "Launch"." with **Undo** for six seconds.
-3. `await snackBar.closed` says why it closed. If the reason is `SnackBarClosedReason.action`, Undo was pressed, so the ID is removed from the set and the project reappears. If it closed any other way, the delete really runs.
+3. `await snackBar.closed` says why it closed. If the reason is `SnackBarClosedReason.action`, Undo was pressed, so the path is removed from the set and the item reappears. If it closed any other way, the delete really runs.
 
 Why not delete straight away and re-create the project on Undo? Because the rules (rightly) refuse to create a project that already has other members, or one whose `createdAt` isn't now. Waiting is simpler and always correct.
 
@@ -459,7 +465,7 @@ Three details:
 There are two test suites:
 
 - **Dart tests** (`test/`, 51 tests): run with `flutter test`. Takes a few seconds.
-- **Security rules tests** (`rules_test/`, 42 tests): run with `npm test` inside `rules_test/`. This starts the Firestore emulator, runs the tests, and stops it. See [section 11](#11-firestore-primer-read-before-phase-2).
+- **Security rules tests** (`rules_test/`, 45 tests): run with `npm test` inside `rules_test/`. This starts the Firestore emulator, runs the tests, and stops it. If the emulators are already running (you'd get "port taken"), use them instead: `FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npm run test:only`. The tests load `firestore.rules` fresh each run. See [section 11](#11-firestore-primer-read-before-phase-2).
 
 ### The testing pyramid
 
@@ -573,7 +579,7 @@ Things that **are** secret and must never be committed: service account JSON fil
  └──────────────────────────┬──────────────────────────────┘
  ┌──────────────── job: rules (runs in parallel) ──────────┐
  │ Java 21 + Node 24 → npm ci → npm test                   │
- │ (Firestore emulator + 42 security rules tests)          │
+ │ (Firestore emulator + 45 security rules tests)          │
  └──────────────────────────┬──────────────────────────────┘
                             │ only if BOTH passed AND branch is main
                             ▼
@@ -685,6 +691,8 @@ Two things surprise almost everyone:
 
 - **Rules are not filters.** `projects.get()` (all projects) is *rejected*, even if you're allowed to read some of them. Firestore refuses any query that *could* return a document you can't read. Your query must include the same condition as the rule, which is exactly what the `arrayContains: uid` query above does.
 - **Rules can read other documents** with `get()` and `exists()`, for example "you may edit a task if you're a member of its parent project". Each lookup counts as a billed read, so keep them few.
+
+A third surprise, found by testing on a device: **writes can arrive twice.** If the server applies a write but the acknowledgement is lost (a flaky network, or the emulator dropping a connection), the SDK sends it again. For a delete, the second attempt finds no document, so `resource` is `null` and a rule like `resource.data.ownerId == uid()` fails. The SDK then treats the delete as rejected and rolls back its local copy, and the app shows a project that no longer exists. That's why every `allow delete` in our rules starts with `isAlreadyDeleted()`: deleting something that isn't there changes nothing, so it's always allowed.
 
 ### Subcollections are not deleted with their parent
 

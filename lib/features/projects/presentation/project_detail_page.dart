@@ -8,9 +8,9 @@ import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/error_state.dart';
 import '../../../core/widgets/priority_chip.dart';
 import '../../../core/widgets/status_chip.dart';
+import '../../../core/widgets/undo_delete.dart';
 import '../../auth/data/auth_repository.dart';
-import '../../tasks/data/task_repository.dart';
-import '../../tasks/domain/task.dart';
+import '../../tasks/presentation/project_task_list.dart';
 import '../data/project_repository.dart';
 import '../domain/project.dart';
 import 'project_actions_menu.dart';
@@ -26,7 +26,9 @@ class ProjectDetailPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final project = ref.watch(projectProvider(projectId));
     final isBeingDeleted = ref.watch(
-      pendingProjectDeletionsProvider.select((ids) => ids.contains(projectId)),
+      pendingDeletionsProvider.select(
+        (keys) => keys.contains(projectDeletionKey(projectId)),
+      ),
     );
     final uid = ref.watch(authStateProvider).value?.uid ?? '';
 
@@ -78,7 +80,7 @@ class _ProjectDetails extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final tasks = ref.watch(projectTasksProvider(project.id));
+    final uid = ref.watch(authStateProvider).value?.uid ?? '';
 
     return ListView(
       padding: const EdgeInsets.all(AppSpacing.md),
@@ -103,39 +105,12 @@ class _ProjectDetails extends ConsumerWidget {
           Text(project.description, style: theme.textTheme.bodyLarge),
         ],
         const SizedBox(height: AppSpacing.lg),
-        Text('Tasks', style: theme.textTheme.titleMedium),
-        const SizedBox(height: AppSpacing.sm),
-        ...switch (tasks) {
-          AsyncData(:final value) when value.isEmpty => [
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: AppSpacing.lg),
-              child: Text('No tasks yet.'),
-            ),
-          ],
-          AsyncData(:final value) => [
-            for (final task in value) _TaskRow(task: task),
-          ],
-          AsyncError() => [const Text("Couldn't load tasks.")],
-          _ => [const LinearProgressIndicator()],
-        },
+        ProjectTaskList(
+          projectId: project.id,
+          uid: uid,
+          canEdit: project.canEdit(uid),
+        ),
       ],
-    );
-  }
-}
-
-// Replaced by the shared TaskCard in the tasks rewrite (roadmap 3.4).
-class _TaskRow extends StatelessWidget {
-  const _TaskRow({required this.task});
-
-  final Task task;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: Icon(StatusChip.iconFor(task.status)),
-      title: Text(task.title),
-      trailing: PriorityChip(task.priority),
     );
   }
 }

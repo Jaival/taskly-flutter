@@ -11,43 +11,55 @@ import '../../../core/widgets/form_error.dart';
 import '../../../core/widgets/priority_status_fields.dart';
 import '../../../core/widgets/progress_button.dart';
 import '../../auth/data/auth_repository.dart';
-import '../data/project_repository.dart';
-import '../domain/project.dart';
+import '../data/task_repository.dart';
+import '../domain/task.dart';
 
-/// Opens the form to create a project, or to edit [project]. Resolves to the
-/// project's ID if it was saved.
-Future<String?> showProjectForm(BuildContext context, {Project? project}) =>
-    showAdaptiveSheet<String>(
+/// Opens the form to edit [task], or to add a task to the project with
+/// [projectId] (a personal task if that's null too). Resolves to true if it
+/// was saved.
+Future<bool> showTaskForm(
+  BuildContext context, {
+  Task? task,
+  String? projectId,
+}) async =>
+    await showAdaptiveSheet<bool>(
       context,
-      builder: (context) => ProjectForm(project: project),
-    );
+      builder: (context) => TaskForm(task: task, projectId: projectId),
+    ) ??
+    false;
 
-class ProjectForm extends ConsumerStatefulWidget {
-  const ProjectForm({super.key, this.project});
+class TaskForm extends ConsumerStatefulWidget {
+  const TaskForm({super.key, this.task, this.projectId});
 
-  /// Null to create a new project.
-  final Project? project;
+  /// Null to create a new task.
+  final Task? task;
+
+  /// Where a new task goes: a project, or null for a personal task. Ignored
+  /// when editing.
+  final String? projectId;
 
   @override
-  ConsumerState<ProjectForm> createState() => _ProjectFormState();
+  ConsumerState<TaskForm> createState() => _TaskFormState();
 }
 
-class _ProjectFormState extends ConsumerState<ProjectForm> {
+class _TaskFormState extends ConsumerState<TaskForm> {
   final _formKey = GlobalKey<FormState>();
-  late final _name = TextEditingController(text: widget.project?.name);
+  // Created once with the form, not in build(). v1 set the text in build(),
+  // which wiped what you'd typed whenever a dropdown changed.
+  late final _title = TextEditingController(text: widget.task?.title);
   late final _description = TextEditingController(
-    text: widget.project?.description,
+    text: widget.task?.description,
   );
-  late Priority _priority = widget.project?.priority ?? Priority.medium;
-  late TaskStatus _status = widget.project?.status ?? TaskStatus.notStarted;
+  late Priority _priority = widget.task?.priority ?? Priority.medium;
+  late TaskStatus _status = widget.task?.status ?? TaskStatus.notStarted;
   bool _saving = false;
   String? _error;
 
-  bool get _isNew => widget.project == null;
+  bool get _isNew => widget.task == null;
 
   @override
   void dispose() {
-    _name.dispose();
+    _title.dispose();
     _description.dispose();
     super.dispose();
   }
@@ -58,27 +70,26 @@ class _ProjectFormState extends ConsumerState<ProjectForm> {
       _saving = true;
       _error = null;
     });
-    final repository = ref.read(projectRepositoryProvider);
+    final repository = ref.read(taskRepositoryProvider);
     try {
-      final String id;
-      if (widget.project case final project?) {
-        id = project.id;
+      if (widget.task case final task?) {
         await repository.updateDetails(
-          id,
-          name: _name.text,
+          task,
+          title: _title.text,
           description: _description.text,
           priority: _priority,
           status: _status,
         );
       } else {
-        id = await repository.createProject(
+        await repository.createTask(
+          projectId: widget.projectId,
           ownerId: ref.read(authRepositoryProvider).currentUser!.uid,
-          name: _name.text,
+          title: _title.text,
           description: _description.text,
           priority: _priority,
         );
       }
-      if (mounted) Navigator.pop(context, id);
+      if (mounted) Navigator.pop(context, true);
     } on FirebaseException {
       if (mounted) {
         setState(
@@ -101,19 +112,19 @@ class _ProjectFormState extends ConsumerState<ProjectForm> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              _isNew ? 'New project' : 'Edit project',
+              _isNew ? 'New task' : 'Edit task',
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: AppSpacing.lg),
             TextFormField(
-              controller: _name,
+              controller: _title,
               autofocus: _isNew,
-              decoration: const InputDecoration(labelText: 'Name'),
+              decoration: const InputDecoration(labelText: 'Title'),
               textCapitalization: TextCapitalization.sentences,
               textInputAction: TextInputAction.next,
               validator: (value) =>
-                  Validators.required(value, field: 'Name') ??
-                  Validators.maxLength(value, 100),
+                  Validators.required(value, field: 'Title') ??
+                  Validators.maxLength(value, 200),
             ),
             const SizedBox(height: AppSpacing.md),
             TextFormField(
@@ -125,7 +136,7 @@ class _ProjectFormState extends ConsumerState<ProjectForm> {
               textCapitalization: TextCapitalization.sentences,
               minLines: 2,
               maxLines: 5,
-              validator: (value) => Validators.maxLength(value, 2000),
+              validator: (value) => Validators.maxLength(value, 5000),
             ),
             const SizedBox(height: AppSpacing.md),
             Row(
@@ -136,7 +147,7 @@ class _ProjectFormState extends ConsumerState<ProjectForm> {
                     onChanged: (value) => setState(() => _priority = value),
                   ),
                 ),
-                // A new project always starts "Not started".
+                // A new task always starts "Not started".
                 if (!_isNew) ...[
                   const SizedBox(width: AppSpacing.md),
                   Expanded(
@@ -153,8 +164,6 @@ class _ProjectFormState extends ConsumerState<ProjectForm> {
               FormError(error),
             ],
             const SizedBox(height: AppSpacing.lg),
-            // Wraps the buttons onto two lines if they don't fit side by side
-            // (narrow phones, large text settings).
             OverflowBar(
               alignment: MainAxisAlignment.end,
               overflowAlignment: OverflowBarAlignment.end,
@@ -162,11 +171,11 @@ class _ProjectFormState extends ConsumerState<ProjectForm> {
               overflowSpacing: AppSpacing.sm,
               children: [
                 TextButton(
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: () => Navigator.pop(context, false),
                   child: const Text('Cancel'),
                 ),
                 ProgressButton(
-                  label: _isNew ? 'Create project' : 'Save',
+                  label: _isNew ? 'Add task' : 'Save',
                   busy: _saving,
                   onPressed: _save,
                 ),
