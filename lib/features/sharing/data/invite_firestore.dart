@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../../core/data/firestore_fields.dart';
-import '../../projects/domain/project.dart';
+import '../../../core/domain/project_role.dart';
 import '../domain/invite.dart';
 
 /// The `invites` collection, typed so reads return [Invite]s.

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../features/auth/data/auth_repository.dart';
 import '../features/auth/presentation/verify_email_banner.dart';
+import '../features/sharing/data/invite_repository.dart';
 import 'router.dart';
 import 'theme/app_spacing.dart';
 
@@ -20,9 +21,13 @@ const List<_Destination> _destinations = [
   (icon: Icons.group_outlined, selectedIcon: Icons.group, label: 'Shared'),
 ];
 
+/// Index of "Shared" in [_destinations], which shows how many invites are
+/// waiting.
+const _sharedIndex = 3;
+
 /// Signed-in layout. The navigation adapts to the window width:
 /// bottom bar on phones, rail on tablets, permanent drawer on desktop.
-class AppShell extends StatelessWidget {
+class AppShell extends ConsumerWidget {
   const AppShell({
     super.key,
     required this.navigationShell,
@@ -41,7 +46,15 @@ class AppShell extends StatelessWidget {
   );
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final invites = ref.watch(receivedInvitesProvider).value?.length ?? 0;
+    Widget icon(int index, {bool selected = false}) {
+      final d = _destinations[index];
+      final child = Icon(selected ? d.selectedIcon : d.icon);
+      if (index != _sharedIndex || invites == 0) return child;
+      return Badge.count(count: invites, child: child);
+    }
+
     final width = MediaQuery.sizeOf(context).width;
     final selected = navigationShell.currentIndex;
     final body = VerifyEmailBanner(child: navigationShell);
@@ -63,10 +76,10 @@ class AppShell extends StatelessWidget {
           selectedIndex: selected,
           onDestinationSelected: _onSelect,
           destinations: [
-            for (final d in _destinations)
+            for (final (i, d) in _destinations.indexed)
               NavigationDestination(
-                icon: Icon(d.icon),
-                selectedIcon: Icon(d.selectedIcon),
+                icon: icon(i),
+                selectedIcon: icon(i, selected: true),
                 label: d.label,
               ),
           ],
@@ -80,10 +93,10 @@ class AppShell extends StatelessWidget {
             onDestinationSelected: _onSelect,
             labelType: NavigationRailLabelType.all,
             destinations: [
-              for (final d in _destinations)
+              for (final (i, d) in _destinations.indexed)
                 NavigationRailDestination(
-                  icon: Icon(d.icon),
-                  selectedIcon: Icon(d.selectedIcon),
+                  icon: icon(i),
+                  selectedIcon: icon(i, selected: true),
                   label: Text(d.label),
                 ),
             ],
@@ -104,10 +117,10 @@ class AppShell extends StatelessWidget {
                   style: Theme.of(context).textTheme.headlineSmall,
                 ),
               ),
-              for (final d in _destinations)
+              for (final (i, d) in _destinations.indexed)
                 NavigationDrawerDestination(
-                  icon: Icon(d.icon),
-                  selectedIcon: Icon(d.selectedIcon),
+                  icon: icon(i),
+                  selectedIcon: icon(i, selected: true),
                   label: Text(d.label),
                 ),
             ],

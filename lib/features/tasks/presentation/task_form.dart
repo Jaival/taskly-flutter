@@ -15,21 +15,23 @@ import '../data/task_repository.dart';
 import '../domain/task.dart';
 
 /// Opens the form to edit [task], or to add a task to the project with
-/// [projectId] (a personal task if that's null too). Resolves to true if it
-/// was saved.
+/// [projectId] (a personal task if that's null too). Pass the project's
+/// [members] to offer assigning it. Resolves to true if it was saved.
 Future<bool> showTaskForm(
   BuildContext context, {
   Task? task,
   String? projectId,
+  Map<String, String>? members,
 }) async =>
     await showAdaptiveSheet<bool>(
       context,
-      builder: (context) => TaskForm(task: task, projectId: projectId),
+      builder: (context) =>
+          TaskForm(task: task, projectId: projectId, members: members),
     ) ??
     false;
 
 class TaskForm extends ConsumerStatefulWidget {
-  const TaskForm({super.key, this.task, this.projectId});
+  const TaskForm({super.key, this.task, this.projectId, this.members});
 
   /// Null to create a new task.
   final Task? task;
@@ -37,6 +39,10 @@ class TaskForm extends ConsumerStatefulWidget {
   /// Where a new task goes: a project, or null for a personal task. Ignored
   /// when editing.
   final String? projectId;
+
+  /// Who the task can be assigned to, as user ID → name. Null for personal
+  /// tasks, which have no assignee field.
+  final Map<String, String>? members;
 
   @override
   ConsumerState<TaskForm> createState() => _TaskFormState();
@@ -52,6 +58,11 @@ class _TaskFormState extends ConsumerState<TaskForm> {
   );
   late Priority _priority = widget.task?.priority ?? Priority.medium;
   late TaskStatus _status = widget.task?.status ?? TaskStatus.notStarted;
+  // Someone who has left the project shows as unassigned.
+  late String? _assigneeId = switch (widget.task?.assigneeId) {
+    final id? when widget.members?.containsKey(id) ?? false => id,
+    _ => null,
+  };
   bool _saving = false;
   String? _error;
 
@@ -79,6 +90,7 @@ class _TaskFormState extends ConsumerState<TaskForm> {
           description: _description.text,
           priority: _priority,
           status: _status,
+          assigneeId: widget.members == null ? null : () => _assigneeId,
         );
       } else {
         await repository.createTask(
@@ -87,6 +99,7 @@ class _TaskFormState extends ConsumerState<TaskForm> {
           title: _title.text,
           description: _description.text,
           priority: _priority,
+          assigneeId: _assigneeId,
         );
       }
       if (mounted) Navigator.pop(context, true);
@@ -159,6 +172,23 @@ class _TaskFormState extends ConsumerState<TaskForm> {
                 ],
               ],
             ),
+            if (widget.members case final members?) ...[
+              const SizedBox(height: AppSpacing.md),
+              DropdownButtonFormField<String?>(
+                initialValue: _assigneeId,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Assignee'),
+                items: [
+                  const DropdownMenuItem(child: Text('Unassigned')),
+                  for (final MapEntry(key: uid, value: name) in members.entries)
+                    DropdownMenuItem(
+                      value: uid,
+                      child: Text(name, overflow: TextOverflow.ellipsis),
+                    ),
+                ],
+                onChanged: (value) => setState(() => _assigneeId = value),
+              ),
+            ],
             if (_error case final error?) ...[
               const SizedBox(height: AppSpacing.md),
               FormError(error),

@@ -7,13 +7,15 @@ import '../../../core/data/firestore_provider.dart';
 import '../../../core/domain/priority.dart';
 import '../../../core/domain/task_status.dart';
 import '../../auth/data/auth_repository.dart';
+import '../../sharing/data/invite_repository.dart';
 import '../domain/project.dart';
 import 'project_firestore.dart';
 
 class ProjectRepository {
-  ProjectRepository(this._db);
+  ProjectRepository(this._db) : _invites = InviteRepository(_db);
 
   final FirebaseFirestore _db;
+  final InviteRepository _invites;
 
   CollectionReference<Project> get _projects => projectsCollection(_db);
 
@@ -70,14 +72,38 @@ class ProjectRepository {
     'updatedAt': FieldValue.serverTimestamp(),
   });
 
-  /// Deletes the project and all of its tasks.
+  /// Gives a member a different role. Only the owner may.
+  Future<void> changeRole(
+    String projectId, {
+    required String uid,
+    required ProjectRole role,
+  }) => _projects.doc(projectId).update({
+    'roles.$uid': role.name,
+    'updatedAt': FieldValue.serverTimestamp(),
+  });
+
+  /// Takes a member out of the project: the owner removing someone, or a
+  /// member leaving. Their tasks keep them as assignee until reassigned.
+  Future<void> removeMember(String projectId, {required String uid}) =>
+      _projects.doc(projectId).update({
+        'memberIds': FieldValue.arrayRemove([uid]),
+        'roles.$uid': FieldValue.delete(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+  /// Deletes the project, all of its tasks and the invites to it.
   ///
   /// Firestore doesn't delete subcollections with their parent, so the tasks
   /// are fetched once and deleted in batches first. (v1 used a live listener
   /// here that never stopped, and kept deleting tasks created later.)
-  Future<void> deleteProject(String id) async {
-    final project = _db.collection('projects').doc(id);
-    final tasks = await project.collection('tasks').get();
+  Future<void> deleteProject(Project project) async {
+    final id = project.id;
+    await _invites.deleteProjectInvites(
+      projectId: id,
+      invitedBy: project.ownerId,
+    );
+    final projectDoc = _db.collection('projects').doc(id);
+    final tasks = await projectDoc.collection('tasks').get();
 
     for (var i = 0; i < tasks.docs.length; i += _maxBatchWrites) {
       final batch = _db.batch();
@@ -87,7 +113,7 @@ class ProjectRepository {
       await batch.commit();
     }
     // Last, so the task deletes above can still check membership.
-    await project.delete();
+    await projectDoc.delete();
   }
 }
 
@@ -103,8 +129,23 @@ final projectsProvider = StreamProvider<List<Project>>((ref) {
 });
 
 /// One project by ID. Null if it doesn't exist or the user can't see it.
-final projectProvider = StreamProvider.family<Project?, String>(
-  (ref, id) => ref
+///
+/// A denied listener is dead: Firestore doesn't retry it. So this starts a
+/// new one when the user changes, and when they join or leave the project
+/// (seen in [projectsProvider]); otherwise someone who opened a project
+/// before being let in would keep seeing "not found".
+final projectProvider = StreamProvider.autoDispose.family<Project?, String>((
+  ref,
+  id,
+) {
+  ref
+    ..watch(authStateProvider.select((user) => user.value?.uid))
+    ..watch(
+      projectsProvider.select(
+        (projects) => projects.value?.any((project) => project.id == id),
+      ),
+    );
+  return ref
       .watch(projectRepositoryProvider)
       .watchProject(id)
       // A non-member gets "permission denied", which to them is the same as
@@ -116,5 +157,5 @@ final projectProvider = StreamProvider.family<Project?, String>(
               ? sink.add(null)
               : sink.addError(error, stackTrace),
         ),
-      ),
-);
+      );
+});

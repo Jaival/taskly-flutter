@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/data/firestore_provider.dart';
+import '../../auth/data/auth_repository.dart';
 import '../domain/user_profile.dart';
 import 'user_profile_firestore.dart';
 
@@ -49,3 +50,12 @@ class UserProfileRepository {
 final userProfileRepositoryProvider = Provider<UserProfileRepository>(
   (ref) => UserProfileRepository(ref.watch(firestoreProvider)),
 );
+
+/// Anyone's public profile, e.g. to show a teammate's name. Null if they
+/// have none. Restarted when the signed-in user changes, since signing out
+/// kills the listener.
+final userProfileProvider = StreamProvider.autoDispose
+    .family<UserProfile?, String>((ref, uid) {
+      ref.watch(authStateProvider.select((user) => user.value?.uid));
+      return ref.watch(userProfileRepositoryProvider).watchProfile(uid);
+    });

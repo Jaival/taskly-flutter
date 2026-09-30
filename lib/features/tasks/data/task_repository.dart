@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/data/firestore_provider.dart';
@@ -45,6 +46,7 @@ class TaskRepository {
     required String title,
     String description = '',
     Priority priority = Priority.medium,
+    String? assigneeId,
   }) async {
     final doc = _collection(projectId).doc();
     await doc.set(
@@ -55,6 +57,7 @@ class TaskRepository {
         title: title.trim(),
         description: description.trim(),
         priority: priority,
+        assigneeId: assigneeId,
         // Later tasks sort after earlier ones, without reading the list to
         // find the current last position.
         order: _clock().millisecondsSinceEpoch.toDouble(),
@@ -71,11 +74,15 @@ class TaskRepository {
     required String description,
     required Priority priority,
     required TaskStatus status,
+    ValueGetter<String?>? assigneeId,
   }) => _doc(task).update({
     'title': title.trim(),
     'description': description.trim(),
     'priority': priority.name,
     'status': status.name,
+    // Only when given: personal tasks have no assignee field in the form.
+    // `() => null` unassigns.
+    if (assigneeId != null) 'assigneeId': assigneeId(),
     'updatedAt': FieldValue.serverTimestamp(),
   });
 
@@ -99,7 +106,12 @@ final personalTasksProvider = StreamProvider<List<Task>>((ref) {
   return ref.watch(taskRepositoryProvider).watchPersonalTasks(uid);
 });
 
-final projectTasksProvider = StreamProvider.family<List<Task>, String>(
-  (ref, projectId) =>
-      ref.watch(taskRepositoryProvider).watchProjectTasks(projectId),
-);
+/// A project's tasks, in list order.
+///
+/// Disposed when nothing shows it, and restarted when the user changes, so a
+/// listener the rules denied (after leaving, or signing out) isn't reused.
+final projectTasksProvider = StreamProvider.autoDispose
+    .family<List<Task>, String>((ref, projectId) {
+      ref.watch(authStateProvider.select((user) => user.value?.uid));
+      return ref.watch(taskRepositoryProvider).watchProjectTasks(projectId);
+    });

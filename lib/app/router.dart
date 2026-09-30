@@ -12,7 +12,7 @@ import '../features/landing/presentation/landing_page.dart';
 import '../features/profile/presentation/profile_page.dart';
 import '../features/projects/presentation/project_detail_page.dart';
 import '../features/projects/presentation/projects_page.dart';
-import '../features/sharing/presentation/shared_page.dart';
+import '../features/projects/presentation/shared_page.dart';
 import '../features/tasks/presentation/tasks_page.dart';
 import 'app_shell.dart';
 import 'not_found_page.dart';

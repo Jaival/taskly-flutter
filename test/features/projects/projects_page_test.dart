@@ -125,12 +125,14 @@ void main() {
     expect(find.text('Launch v2'), findsOneWidget);
   });
 
-  testWidgets('viewers get no actions menu', (tester) async {
+  testWidgets('viewers can only leave', (tester) async {
     await seedProject('p1', role: 'viewer');
     await pumpProjects(tester);
 
-    expect(find.text('Launch'), findsOneWidget);
-    expect(find.byTooltip('Actions for Launch'), findsNothing);
+    await openMenu(tester, 'Launch');
+    expect(find.text('Leave project'), findsOneWidget);
+    expect(find.text('Edit'), findsNothing);
+    expect(find.text('Delete'), findsNothing);
   });
 
   testWidgets('editors can edit but not delete', (tester) async {

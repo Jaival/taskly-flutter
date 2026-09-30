@@ -15,6 +15,7 @@ import '../data/project_repository.dart';
 import '../domain/project.dart';
 import 'project_actions_menu.dart';
 import 'project_deletion.dart';
+import 'project_members.dart';
 
 /// `/projects/:id`: a project's details and its tasks.
 class ProjectDetailPage extends ConsumerWidget {
@@ -45,7 +46,7 @@ class ProjectDetailPage extends ConsumerWidget {
             ProjectActionsMenu(
               project: project,
               uid: uid,
-              onDeleted: () {
+              onGone: () {
                 if (context.mounted) context.go(Routes.projects);
               },
             ),
@@ -79,11 +80,67 @@ class _ProjectDetails extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     final uid = ref.watch(authStateProvider).value?.uid ?? '';
+    final members = watchMembers(ref, project);
 
-    return ListView(
-      padding: const EdgeInsets.all(AppSpacing.md),
+    final tasks = ProjectTaskList(
+      projectId: project.id,
+      uid: uid,
+      canEdit: project.canEdit(uid),
+      members: {
+        for (final member in members)
+          member.uid: member.uid == uid ? '${member.name} (you)' : member.name,
+      },
+    );
+    final people = ProjectMembers(project: project, members: members, uid: uid);
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Side by side when there's room, tasks first.
+        final wide = constraints.maxWidth >= 900;
+        return Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1200),
+            child: ListView(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              children: [
+                _Summary(project: project),
+                const SizedBox(height: AppSpacing.lg),
+                if (wide)
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(flex: 2, child: tasks),
+                      const SizedBox(width: AppSpacing.xl),
+                      Expanded(child: people),
+                    ],
+                  )
+                else ...[
+                  tasks,
+                  const SizedBox(height: AppSpacing.lg),
+                  people,
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Priority, status, member count and description.
+class _Summary extends StatelessWidget {
+  const _Summary({required this.project});
+
+  final Project project;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Wrap(
           spacing: AppSpacing.md,
@@ -104,12 +161,6 @@ class _ProjectDetails extends ConsumerWidget {
           const SizedBox(height: AppSpacing.md),
           Text(project.description, style: theme.textTheme.bodyLarge),
         ],
-        const SizedBox(height: AppSpacing.lg),
-        ProjectTaskList(
-          projectId: project.id,
-          uid: uid,
-          canEdit: project.canEdit(uid),
-        ),
       ],
     );
   }

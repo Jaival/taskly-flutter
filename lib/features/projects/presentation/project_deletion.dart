@@ -39,7 +39,7 @@ Future<bool> deleteProjectWithUndo(
     key: projectDeletionKey(project.id),
     message: 'Deleted "${project.name}".',
     failureMessage: "Couldn't delete ${project.name}.",
-    delete: () => repository.deleteProject(project.id),
+    delete: () => repository.deleteProject(project),
   );
   return true;
 }

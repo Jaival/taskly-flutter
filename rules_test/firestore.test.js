@@ -357,6 +357,26 @@ describe('project tasks', () => {
     await assertFails(setDoc(doc(db, 'projects/p1/tasks/b'), task({ ownerId: 'bob', assigneeId: 'dave' })));
   });
 
+  test('a task assigned to someone who left can still be edited', async () => {
+    await seed((db) => setDoc(doc(db, 'projects/p1/tasks/t2'), task({ assigneeId: 'zed' })));
+    const db = as('bob');
+    await assertSucceeds(updateDoc(doc(db, 'projects/p1/tasks/t2'), {
+      status: 'complete',
+      updatedAt: serverTimestamp(),
+    }));
+    await assertSucceeds(updateDoc(doc(db, 'projects/p1/tasks/t2'), {
+      assigneeId: null,
+      updatedAt: serverTimestamp(),
+    }));
+  });
+
+  test("a task can't be reassigned to someone outside the project", async () => {
+    await assertFails(updateDoc(doc(as('bob'), 'projects/p1/tasks/t1'), {
+      assigneeId: 'dave',
+      updatedAt: serverTimestamp(),
+    }));
+  });
+
   test('a viewer can update the status of a task assigned to them, and nothing else', async () => {
     const db = as('carol');
     await assertSucceeds(updateDoc(doc(db, 'projects/p1/tasks/t1'), {
@@ -428,11 +448,41 @@ describe('invites', () => {
     await assertFails(getDoc(doc(as('dave'), 'invites', erinInviteId)));
   });
 
-  test('the invitee can list their invites by email', async () => {
+  test('the invitee can list their pending invites by email', async () => {
     const db = as('erin');
-    await assertSucceeds(
-      getDocs(query(collection(db, 'invites'), where('email', '==', users.erin))),
-    );
+    await assertSucceeds(getDocs(query(
+      collection(db, 'invites'),
+      where('email', '==', users.erin),
+      where('status', '==', 'pending'),
+    )));
+    await assertFails(getDocs(query(
+      collection(db, 'invites'),
+      where('email', '==', users.alice),
+    )));
+  });
+
+  test("the owner can list the invites they sent for a project", async () => {
+    await assertSucceeds(getDocs(query(
+      collection(as('alice'), 'invites'),
+      where('projectId', '==', 'p1'),
+      where('invitedBy', '==', 'alice'),
+    )));
+    // Without the invitedBy filter the query could return other people's.
+    await assertFails(getDocs(query(
+      collection(as('alice'), 'invites'),
+      where('projectId', '==', 'p1'),
+    )));
+  });
+
+  test('the invitee can decline, and change nothing else', async () => {
+    const db = as('erin');
+    await assertFails(updateDoc(doc(db, 'invites', erinInviteId), { role: 'editor' }));
+    await assertSucceeds(updateDoc(doc(db, 'invites', erinInviteId), { status: 'declined' }));
+  });
+
+  test('the owner can cancel an invite', async () => {
+    await assertFails(deleteDoc(doc(as('bob'), 'invites', erinInviteId)));
+    await assertSucceeds(deleteDoc(doc(as('alice'), 'invites', erinInviteId)));
   });
 });
 

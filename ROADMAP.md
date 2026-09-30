@@ -161,7 +161,7 @@ Legacy: `Screens/Projects.dart`, `Widgets/Project/*`, `Shared/CustomProjectTile.
 - [x] Delete from an overflow menu, with a confirmation and an "Undo" snackbar. Delete the project's tasks with a one-time `get()` + `WriteBatch`. The old code used a live listener that never stopped and kept deleting tasks created later with the same project ID.
   - The project is hidden at once but only deleted when the snackbar closes without Undo, since the rules (rightly) don't allow re-creating a project with its members.
 - [x] Project detail page at `/projects/:id` listing its tasks. Unknown IDs and projects you're not in both show "Project not found".
-- [x] The menu adapts to the role: owners can edit and delete, editors can edit, viewers see no menu.
+- [x] The menu adapts to the role: owners can edit and delete, editors can edit. Other members can leave (added in 3.6).
 
 ### 3.4 Tasks
 Legacy: `Screens/Tasks.dart`, `Widgets/Tasks/*`, `Shared/CustomTile.dart`, `Shared/CustomNoTask.dart`, `Model/TaskModel.dart`
@@ -183,9 +183,15 @@ Legacy: `Screens/Home.dart`, `Widgets/Home/*`
 ### 3.6 Sharing
 Legacy: `Screens/SharedTask.dart`, `Widgets/SharedTask/*`, `Model/SharedTaskModel.dart`
 
-- [ ] Invite by **email** to a project, with roles (owner, editor, viewer). Accept or decline from an invites page.
-- [ ] Assign tasks to project members from a dropdown instead of free text.
-- [ ] "Shared with me" is simply projects where your uid is in `memberIds`, so no separate collection or nested `FutureBuilder`s are needed.
+- [x] Invite by **email** to a project, with roles (owner, editor, viewer). Accept or decline from an invites page.
+  - The owner invites from the project page's Members section, sees pending and declined invites there, and can cancel them. Re-inviting replaces the old invite.
+  - Invites appear on the Shared page once the invitee has verified that email, with a count badge on the Shared tab. Accepting joins the project in one batch with the invite and opens it.
+  - The owner can change roles and remove members; anyone else can leave. Deleting a project withdraws its invites.
+- [x] Assign tasks to project members from a dropdown instead of free text. Cards show the assignee's name, read from their `users/{uid}` profile.
+  - The rules now only check that a *new* assignee is a member, so tasks of someone who left can still be edited and ticked off (50 rules tests). The form shows them as unassigned.
+- [x] "Shared with me" is simply projects where your uid is in `memberIds` and you're not the owner, so no separate collection or nested `FutureBuilder`s are needed.
+- Found while testing on a device: after one account signed out, per-project providers kept a listener the rules had killed, so the next account saw "Project not found" for a project it had just joined. Those providers are now `autoDispose` and restart when the user or their membership changes (devops.md 5.2).
+- "Assigned to me" across all projects needs a collection-group query and index; it's in Phase 4 with filtering.
 
 ### 3.7 Landing page and misc
 Legacy: `Screens/LandingPage.dart`, `Widgets/LandingPage/*`, `Widgets/NavBar/*`, `Screens/ContactUs.dart`, `Screens/Error.dart`

@@ -221,14 +221,15 @@ presentation  ──►  data  ──►  domain
 ### `app/` vs `core/` vs `features/`
 
 - `features/` knows about the product ("projects", "tasks").
-- `core/` holds what several features share. `core/widgets` and `core/data` know nothing about the product (`EmptyState` could be copied into any app). `core/domain` is the exception: `Priority` and `TaskStatus` are product vocabulary, but both projects and tasks use them, and putting them in either feature would make the other depend on it.
+- `core/` holds what several features share. `core/widgets` and `core/data` know nothing about the product (`EmptyState` could be copied into any app). `core/domain` is the exception: `Priority`, `TaskStatus` and `ProjectRole` are product vocabulary, but several features use them, and putting them in one feature would make the others depend on it.
 - `app/` is the glue that knows about *all* features (the router imports every page), so nothing in `features/` should import from `app/` except the theme and `Routes` constants.
 
 **A feature's public API is its `domain/` models and its repository provider.** Other features may use those, but never its `*_firestore.dart` files. Widgets are private too, with one kind of exception: a widget built *for* another feature to embed. For example:
 
-- `sharing` uses `ProjectRole` from `projects/domain`. It's a plain value, so that's fine.
+- `ProjectRole` lived in `projects/domain` until invites needed it too. The projects feature embeds sharing's widgets, so sharing importing projects would have made a cycle; the role moved to `core/domain` instead.
 - Sign-up (in `auth`) creates the user's profile through `userProfileRepositoryProvider` from `profile/data`. It never touches the `users` collection directly, so the profile feature stays free to change how profiles are stored.
-- The project page shows `ProjectTaskList` from `tasks/presentation`. It takes plain values (`projectId`, `uid`, `canEdit`), not a `Project`, so `tasks` doesn't depend on `projects`. Dependencies between features should point one way; if two features need each other, something belongs in `core/`.
+- The project page shows `ProjectTaskList` from `tasks/presentation`. It takes plain values (`projectId`, `uid`, `canEdit`, `members`), not a `Project`, so `tasks` doesn't depend on `projects`. Dependencies between features should point one way; if two features need each other, something belongs in `core/`.
+- The same goes for sharing: the project page embeds `ProjectInvites` and opens `showInviteForm`, and the Shared page (in `projects`, since it lists projects) embeds `ReceivedInvites`. All take plain values. So the arrows are `projects → sharing, tasks, profile` and `sharing → profile, auth`, never back.
 
 ### Why models and Firestore code are separate files
 
@@ -337,6 +338,26 @@ ProviderContainer(overrides: [
 ```
 
 The whole app then runs against the fake, with no Firebase and no network.
+
+**Families, `autoDispose`, and dead listeners.** `projectProvider('p1')` is a *family*: one provider per argument. Providers are cached until disposed, and a plain family is never disposed. That bit us: Ada opened a project and signed out, the security rules then denied her listener (Firestore stops a denied listener for good), and the provider turned the error into "not found". Bob signed in on the same device, accepted an invite to that project, and got the cached "not found".
+
+The fix, in [`project_repository.dart`](lib/features/projects/data/project_repository.dart):
+
+```dart
+final projectProvider = StreamProvider.autoDispose.family<Project?, String>((ref, id) {
+  ref
+    ..watch(authStateProvider.select((user) => user.value?.uid))  // new user: new listener
+    ..watch(projectsProvider.select(                                // joined or left: new listener
+        (projects) => projects.value?.any((project) => project.id == id)));
+  return ref.watch(projectRepositoryProvider).watchProject(id)...;
+});
+```
+
+- `autoDispose` drops the provider once no widget watches it, so the next visit starts fresh.
+- Watching the user's ID rebuilds it (and so re-listens) when the account changes.
+- Watching membership re-listens when you join, even if the "not found" page stayed open meanwhile.
+
+Rule of thumb: any per-ID stream the rules might deny should be `autoDispose` and depend on the signed-in user. `test/features/projects/project_provider_test.dart` fakes the rules' behaviour to pin this down.
 
 ### 5.3 Routing with go_router
 
@@ -465,7 +486,7 @@ Three details:
 There are two test suites:
 
 - **Dart tests** (`test/`, 51 tests): run with `flutter test`. Takes a few seconds.
-- **Security rules tests** (`rules_test/`, 45 tests): run with `npm test` inside `rules_test/`. This starts the Firestore emulator, runs the tests, and stops it. If the emulators are already running (you'd get "port taken"), use them instead: `FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npm run test:only`. The tests load `firestore.rules` fresh each run. See [section 11](#11-firestore-primer-read-before-phase-2).
+- **Security rules tests** (`rules_test/`, 50 tests): run with `npm test` inside `rules_test/`. This starts the Firestore emulator, runs the tests, and stops it. If the emulators are already running (you'd get "port taken"), use them instead: `FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npm run test:only`. The tests load `firestore.rules` fresh each run. See [section 11](#11-firestore-primer-read-before-phase-2).
 
 ### The testing pyramid
 
@@ -579,7 +600,7 @@ Things that **are** secret and must never be committed: service account JSON fil
  └──────────────────────────┬──────────────────────────────┘
  ┌──────────────── job: rules (runs in parallel) ──────────┐
  │ Java 21 + Node 24 → npm ci → npm test                   │
- │ (Firestore emulator + 45 security rules tests)          │
+ │ (Firestore emulator + 50 security rules tests)          │
  └──────────────────────────┬──────────────────────────────┘
                             │ only if BOTH passed AND branch is main
                             ▼

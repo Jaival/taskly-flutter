@@ -18,9 +18,13 @@ class ProjectTaskList extends ConsumerWidget {
     required this.projectId,
     required this.uid,
     required this.canEdit,
+    this.members = const {},
   });
 
   final String projectId;
+
+  /// The project's members, as user ID → name, for assigning tasks.
+  final Map<String, String> members;
 
   /// The signed-in user.
   final String uid;
@@ -47,7 +51,11 @@ class ProjectTaskList extends ConsumerWidget {
             ),
             if (canEdit)
               TextButton.icon(
-                onPressed: () => showTaskForm(context, projectId: projectId),
+                onPressed: () => showTaskForm(
+                  context,
+                  projectId: projectId,
+                  members: members,
+                ),
                 icon: const Icon(Icons.add),
                 label: const Text('Add task'),
               ),
@@ -76,6 +84,7 @@ class ProjectTaskList extends ConsumerWidget {
                   padding: const EdgeInsets.only(bottom: AppSpacing.xs),
                   child: TaskCard(
                     task: task,
+                    members: members,
                     canEdit: canEdit,
                     canChangeStatus: canEdit || task.assigneeId == uid,
                   ),

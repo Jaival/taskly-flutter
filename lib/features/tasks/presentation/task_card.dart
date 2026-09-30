@@ -24,11 +24,16 @@ class TaskCard extends ConsumerWidget {
   const TaskCard({
     super.key,
     required this.task,
+    this.members,
     this.canEdit = true,
     this.canChangeStatus = true,
   });
 
   final Task task;
+
+  /// The project's members, as user ID → name, to show the assignee and
+  /// offer them in the edit form. Null for personal tasks.
+  final Map<String, String>? members;
 
   /// Whether the user may edit and delete it. Project viewers can't.
   final bool canEdit;
@@ -81,7 +86,9 @@ class TaskCard extends ConsumerWidget {
     return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: canEdit ? () => showTaskForm(context, task: task) : null,
+        onTap: canEdit
+            ? () => showTaskForm(context, task: task, members: members)
+            : null,
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
           child: Row(
@@ -142,6 +149,8 @@ class TaskCard extends ConsumerWidget {
                         children: [
                           PriorityChip(task.priority),
                           StatusChip(task.status),
+                          if (members?[task.assigneeId] case final name?)
+                            _Assignee(name),
                         ],
                       ),
                     ],
@@ -159,6 +168,36 @@ class TaskCard extends ConsumerWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _Assignee extends StatelessWidget {
+  const _Assignee(this.name);
+
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = theme.colorScheme.onSurfaceVariant;
+    return Semantics(
+      label: 'Assigned to $name',
+      excludeSemantics: true,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.person_outline, size: 16, color: color),
+          const SizedBox(width: AppSpacing.xs),
+          Flexible(
+            child: Text(
+              name,
+              style: theme.textTheme.labelMedium?.copyWith(color: color),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
       ),
     );
   }

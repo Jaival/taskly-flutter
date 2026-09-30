@@ -112,4 +112,29 @@ void main() {
     expect(await repository.watchProjectTasks('p1').first, isEmpty);
     expect(await repository.watchPersonalTasks('alice').first, hasLength(1));
   });
+
+  test('a project task can be assigned, reassigned and unassigned', () async {
+    await repository.createTask(
+      projectId: 'p1',
+      ownerId: 'alice',
+      title: 'x',
+      assigneeId: 'bob',
+    );
+    Future<String?> assignee() async =>
+        (await repository.watchProjectTasks('p1').first).single.assigneeId;
+    expect(await assignee(), 'bob');
+
+    Future<void> assign(String? uid) async => repository.updateDetails(
+      (await repository.watchProjectTasks('p1').first).single,
+      title: 'x',
+      description: '',
+      priority: Priority.medium,
+      status: TaskStatus.notStarted,
+      assigneeId: () => uid,
+    );
+    await assign('carol');
+    expect(await assignee(), 'carol');
+    await assign(null);
+    expect(await assignee(), isNull);
+  });
 }

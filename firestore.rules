@@ -240,6 +240,15 @@ service cloud.firestore {
               || data.assigneeId in project().memberIds;
         }
 
+        // Only a new assignee must be a member. Someone who has left the
+        // project stays on their old tasks until an editor reassigns them,
+        // and those tasks must still be editable (and tickable) meanwhile.
+        function keepsOrHasValidAssignee() {
+          return incoming().get('assigneeId', null)
+                  == resource.data.get('assigneeId', null)
+              || hasValidAssignee(incoming());
+        }
+
         allow read: if isProjectMember();
 
         allow create: if canEditProject()
@@ -254,7 +263,7 @@ service cloud.firestore {
               canEditProject()
               && incoming().ownerId == resource.data.ownerId
               && isValidTask(incoming())
-              && hasValidAssignee(incoming())
+              && keepsOrHasValidAssignee()
               && hasUpdateTimestamps()
             ) || (
               isProjectMember()
