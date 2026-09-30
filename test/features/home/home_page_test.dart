@@ -64,13 +64,58 @@ void main() {
   Finder statCard(String label, int count) =>
       find.bySemanticsLabel('$label: $count');
 
-  testWidgets('a new account is welcomed with ways to start', (tester) async {
-    await pumpHome(tester);
+  group('a new account is welcomed, and', () {
+    testWidgets('can create a project right there', (tester) async {
+      await pumpHome(tester);
+      expect(find.text('Welcome to Taskly'), findsOneWidget);
 
-    expect(find.text('Welcome to Taskly'), findsOneWidget);
-    await tester.tap(find.text('Add a task'));
-    await tester.pumpAndSettle();
-    expect(find.byType(TasksPage), findsOneWidget);
+      await tester.tap(find.text('Create a project'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Name'),
+        'Launch',
+      );
+      await tester.tap(find.text('Create project'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ProjectDetailPage), findsOneWidget);
+      expect(find.widgetWithText(AppBar, 'Launch'), findsOneWidget);
+    });
+
+    testWidgets('can add a task right there', (tester) async {
+      await pumpHome(tester);
+
+      await tester.tap(find.text('Add a task'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Title'),
+        'Buy milk',
+      );
+      await tester.tap(find.widgetWithText(FilledButton, 'Add task'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(HomePage), findsOneWidget);
+      expect(find.text('Welcome to Taskly'), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byType(TaskCard),
+          matching: find.text('Buy milk'),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('cancelling a form leaves the welcome', (tester) async {
+      await pumpHome(tester);
+
+      await tester.tap(find.text('Create a project'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Welcome to Taskly'), findsOneWidget);
+      expect((await firestore.collection('projects').get()).docs, isEmpty);
+    });
   });
 
   testWidgets('greets the user and counts their work', (tester) async {

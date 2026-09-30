@@ -211,7 +211,7 @@ Legacy: `Screens/LandingPage.dart`, `Widgets/LandingPage/*`, `Widgets/NavBar/*`,
 - [x] Accessibility: semantic labels, sufficient contrast (the old white-on-pastel text failed), keyboard navigation and focus order, text that scales.
   - `test/app/accessibility_test.dart` runs Flutter's contrast, tap-target and label guidelines on every main page in light and dark mode, checks nothing overflows with text at 200%, and logs in and ticks off a task with only the keyboard.
   - Text at 200% found three overflows, now fixed: the landing app bar, the status label, and the fixed-height project cards (their height now grows with the text).
-- [x] Unit tests for the repository (`fake_cloud_firestore`, `firebase_auth_mocks`) and widget tests for its forms and cards. 198 Dart tests and 50 rules tests.
+- [x] Unit tests for the repository (`fake_cloud_firestore`, `firebase_auth_mocks`) and widget tests for its forms and cards. 200 Dart tests and 50 rules tests.
 
 **Exit criteria:** `legacy/` is deleted and every original feature works in the new app. ✅ Met: `legacy/` is gone, and every v1 feature (auth, profile, projects, tasks, home, sharing, landing) has been rewritten and checked on an Android emulator against the Firebase emulators.
 

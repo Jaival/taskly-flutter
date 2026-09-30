@@ -13,9 +13,11 @@ import '../../../core/widgets/undo_delete.dart';
 import '../../auth/data/auth_repository.dart';
 import '../../projects/data/project_repository.dart';
 import '../../projects/domain/project.dart';
+import '../../projects/presentation/project_form.dart';
 import '../../tasks/data/task_repository.dart';
 import '../../tasks/domain/task.dart';
 import '../../tasks/presentation/task_card.dart';
+import '../../tasks/presentation/task_form.dart';
 
 /// How many open tasks and recent projects the dashboard shows.
 const _upNextCount = 5;
@@ -25,6 +27,12 @@ const _recentProjectCount = 4;
 /// projects.
 class HomePage extends ConsumerWidget {
   const HomePage({super.key});
+
+  /// Opens the new-project form, then the project once it's created.
+  Future<void> _createProject(BuildContext context) async {
+    final id = await showProjectForm(context);
+    if (id != null && context.mounted) context.go(Routes.project(id));
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -55,12 +63,13 @@ class HomePage extends ConsumerWidget {
             runSpacing: AppSpacing.sm,
             children: [
               FilledButton.icon(
-                onPressed: () => context.go(Routes.projects),
+                onPressed: () => _createProject(context),
                 icon: const Icon(Icons.folder_outlined),
                 label: const Text('Create a project'),
               ),
               OutlinedButton.icon(
-                onPressed: () => context.go(Routes.tasks),
+                // Once saved, the dashboard replaces this and lists it.
+                onPressed: () => showTaskForm(context),
                 icon: const Icon(Icons.task_alt_outlined),
                 label: const Text('Add a task'),
               ),
