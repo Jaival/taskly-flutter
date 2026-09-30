@@ -47,6 +47,7 @@ class TaskRepository {
     String description = '',
     Priority priority = Priority.medium,
     String? assigneeId,
+    DateTime? dueDate,
   }) async {
     final doc = _collection(projectId).doc();
     await doc.set(
@@ -58,6 +59,7 @@ class TaskRepository {
         description: description.trim(),
         priority: priority,
         assigneeId: assigneeId,
+        dueDate: dueDate,
         // Later tasks sort after earlier ones, without reading the list to
         // find the current last position.
         order: _clock().millisecondsSinceEpoch.toDouble(),
@@ -74,12 +76,14 @@ class TaskRepository {
     required String description,
     required Priority priority,
     required TaskStatus status,
+    required DateTime? dueDate,
     ValueGetter<String?>? assigneeId,
   }) => _doc(task).update({
     'title': title.trim(),
     'description': description.trim(),
     'priority': priority.name,
     'status': status.name,
+    'dueDate': dueDateToFirestore(dueDate),
     // Only when given: personal tasks have no assignee field in the form.
     // `() => null` unassigns.
     if (assigneeId != null) 'assigneeId': assigneeId(),

@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:taskly/app/router.dart';
 import 'package:taskly/features/home/presentation/home_page.dart';
 
+import '../helpers/due_dates.dart';
 import '../helpers/fake_auth_repository.dart';
 import '../helpers/pump_app.dart';
 
@@ -56,6 +57,9 @@ void main() {
         'updatedAt': Timestamp.now(),
       });
     }
+    // One overdue (in the error colour) and one upcoming.
+    await firestore.doc('tasks/a').update({'dueDate': dueTimestamp(-2)});
+    await firestore.doc('tasks/b').update({'dueDate': dueTimestamp(1)});
     await firestore.doc('invites/p9_ada@example.com').set({
       'projectId': 'p9',
       'projectName': 'Offsite',

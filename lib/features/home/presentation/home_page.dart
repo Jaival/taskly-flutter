@@ -15,6 +15,7 @@ import '../../projects/data/project_repository.dart';
 import '../../projects/domain/project.dart';
 import '../../projects/presentation/project_form.dart';
 import '../../tasks/data/task_repository.dart';
+import '../../tasks/domain/due_date.dart';
 import '../../tasks/domain/task.dart';
 import '../../tasks/presentation/task_card.dart';
 import '../../tasks/presentation/task_form.dart';
@@ -262,7 +263,8 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
-/// The first few open personal tasks, in list order.
+/// The first few open personal tasks: the most urgent by due date, then the
+/// undated ones in list order.
 class _UpNext extends StatelessWidget {
   const _UpNext({required this.tasks});
 
@@ -279,10 +281,10 @@ class _UpNext extends StatelessWidget {
           route: Routes.tasks,
         ),
         ...switch (tasks) {
-          AsyncData(:final value) => switch ([
-            for (final task in value)
-              if (!task.isComplete) task,
-          ]) {
+          AsyncData(:final value) => switch (openTasksByDue(
+            value,
+            DateTime.now(),
+          )) {
             [] => [
               _Placeholder(
                 value.isEmpty ? 'No tasks yet.' : "You're all done. Nice work!",

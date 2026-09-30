@@ -74,6 +74,7 @@ void main() {
       description: 'More detail',
       priority: Priority.immediate,
       status: TaskStatus.inProgress,
+      dueDate: null,
     );
 
     final saved = (await repository.watchProjectTasks('p1').first).single;
@@ -130,11 +131,39 @@ void main() {
       description: '',
       priority: Priority.medium,
       status: TaskStatus.notStarted,
+      dueDate: null,
       assigneeId: () => uid,
     );
     await assign('carol');
     expect(await assignee(), 'carol');
     await assign(null);
     expect(await assignee(), isNull);
+  });
+
+  test('a due date is set, changed and cleared as a whole day', () async {
+    await repository.createTask(
+      ownerId: 'alice',
+      title: 'x',
+      dueDate: DateTime(2026, 9, 3, 18, 30),
+    );
+    Future<DateTime?> due() async =>
+        (await repository.watchPersonalTasks('alice').first).single.dueDate;
+    Future<Object?> stored() async =>
+        (await db.collection('tasks').get()).docs.single.data()['dueDate'];
+    expect(await due(), DateTime(2026, 9, 3));
+    expect(await stored(), Timestamp.fromDate(DateTime.utc(2026, 9, 3)));
+
+    Future<void> setDue(DateTime? date) async => repository.updateDetails(
+      (await repository.watchPersonalTasks('alice').first).single,
+      title: 'x',
+      description: '',
+      priority: Priority.medium,
+      status: TaskStatus.notStarted,
+      dueDate: date,
+    );
+    await setDue(DateTime(2026, 12, 25));
+    expect(await due(), DateTime(2026, 12, 25));
+    await setDue(null);
+    expect(await due(), isNull);
   });
 }

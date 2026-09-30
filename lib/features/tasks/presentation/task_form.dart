@@ -13,6 +13,7 @@ import '../../../core/widgets/progress_button.dart';
 import '../../auth/data/auth_repository.dart';
 import '../data/task_repository.dart';
 import '../domain/task.dart';
+import 'due_date_label.dart';
 
 /// Opens the form to edit [task], or to add a task to the project with
 /// [projectId] (a personal task if that's null too). Pass the project's
@@ -58,6 +59,9 @@ class _TaskFormState extends ConsumerState<TaskForm> {
   );
   late Priority _priority = widget.task?.priority ?? Priority.medium;
   late TaskStatus _status = widget.task?.status ?? TaskStatus.notStarted;
+  late DateTime? _dueDate = widget.task?.dueDate;
+  // Shows _dueDate; the field is read-only and opens a date picker.
+  final _dueText = TextEditingController();
   // Someone who has left the project shows as unassigned.
   late String? _assigneeId = switch (widget.task?.assigneeId) {
     final id? when widget.members?.containsKey(id) ?? false => id,
@@ -69,10 +73,38 @@ class _TaskFormState extends ConsumerState<TaskForm> {
   bool get _isNew => widget.task == null;
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Formatting needs the locale, which initState can't read.
+    _dueText.text = _formatDue(_dueDate);
+  }
+
+  @override
   void dispose() {
     _title.dispose();
     _description.dispose();
+    _dueText.dispose();
     super.dispose();
+  }
+
+  String _formatDue(DateTime? due) => due == null
+      ? ''
+      : formatDueDate(MaterialLocalizations.of(context), due, DateTime.now());
+
+  void _setDue(DateTime? due) => setState(() {
+    _dueDate = due;
+    _dueText.text = _formatDue(due);
+  });
+
+  Future<void> _pickDue() async {
+    final picked = await showDatePicker(
+      context: context,
+      helpText: 'Due date',
+      initialDate: _dueDate ?? DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (picked != null) _setDue(picked);
   }
 
   Future<void> _save() async {
@@ -90,6 +122,7 @@ class _TaskFormState extends ConsumerState<TaskForm> {
           description: _description.text,
           priority: _priority,
           status: _status,
+          dueDate: _dueDate,
           assigneeId: widget.members == null ? null : () => _assigneeId,
         );
       } else {
@@ -100,6 +133,7 @@ class _TaskFormState extends ConsumerState<TaskForm> {
           description: _description.text,
           priority: _priority,
           assigneeId: _assigneeId,
+          dueDate: _dueDate,
         );
       }
       if (mounted) Navigator.pop(context, true);
@@ -171,6 +205,26 @@ class _TaskFormState extends ConsumerState<TaskForm> {
                   ),
                 ],
               ],
+            ),
+            const SizedBox(height: AppSpacing.md),
+            TextFormField(
+              controller: _dueText,
+              readOnly: true,
+              onTap: _pickDue,
+              decoration: InputDecoration(
+                labelText: 'Due date (optional)',
+                suffixIcon: _dueDate == null
+                    ? IconButton(
+                        tooltip: 'Pick a due date',
+                        icon: const Icon(Icons.event_outlined),
+                        onPressed: _pickDue,
+                      )
+                    : IconButton(
+                        tooltip: 'Clear the due date',
+                        icon: const Icon(Icons.clear),
+                        onPressed: () => _setDue(null),
+                      ),
+              ),
             ),
             if (widget.members case final members?) ...[
               const SizedBox(height: AppSpacing.md),

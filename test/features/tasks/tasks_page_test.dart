@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:taskly/app/router.dart';
 import 'package:taskly/features/tasks/presentation/task_card.dart';
 
+import '../../helpers/due_dates.dart';
 import '../../helpers/pump_app.dart';
 
 void main() {
@@ -19,6 +20,7 @@ void main() {
     String status = 'notStarted',
     String? assigneeId,
     double order = 1,
+    int? dueInDays,
   }) => firestore.doc(path).set({
     'ownerId': ownerId ?? testUser.uid,
     'title': title,
@@ -26,6 +28,7 @@ void main() {
     'priority': 'medium',
     'status': status,
     'assigneeId': assigneeId,
+    'dueDate': dueInDays == null ? null : dueTimestamp(dueInDays),
     'order': order,
     'createdAt': Timestamp.now(),
     'updatedAt': Timestamp.now(),
@@ -268,6 +271,106 @@ void main() {
       await tester.tap(find.text('Theirs'));
       await tester.pumpAndSettle();
       expect(find.text('Edit task'), findsNothing);
+    });
+  });
+
+  group('due dates', () {
+    Future<void> openNewTask(WidgetTester tester) async {
+      await pumpTasks(tester);
+      await tester.tap(find.text('New task'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Title'),
+        'Pay rent',
+      );
+    }
+
+    testWidgets('a new task can be given a due date', (tester) async {
+      await openNewTask(tester);
+      await tester.tap(find.byTooltip('Pick a due date'));
+      await tester.pumpAndSettle();
+      // The picker opens on today.
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Add task'));
+      await tester.pumpAndSettle();
+
+      expect((await onlyTaskIn('tasks'))['dueDate'], dueTimestamp(0));
+      expect(find.text('Today · 1'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(TaskCard),
+          matching: find.text('Today'),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('the due date can be cleared', (tester) async {
+      await seedTask('tasks/a', title: 'Pay rent', dueInDays: 3);
+      await pumpTasks(tester);
+      expect(find.text('In 3 days'), findsOneWidget);
+
+      await tester.tap(find.text('Pay rent'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Clear the due date'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await tester.pumpAndSettle();
+
+      expect((await onlyTaskIn('tasks'))['dueDate'], isNull);
+      expect(find.text('In 3 days'), findsNothing);
+    });
+
+    testWidgets('tasks are grouped by when they are due', (tester) async {
+      await seedTask('tasks/a', title: 'Someday', order: 1);
+      await seedTask('tasks/b', title: 'Next week', dueInDays: 7, order: 2);
+      await seedTask('tasks/c', title: 'Late', dueInDays: -2, order: 3);
+      await seedTask('tasks/d', title: 'Now', dueInDays: 0, order: 4);
+      await seedTask('tasks/e', title: 'Soon', dueInDays: 1, order: 5);
+      await seedTask(
+        'tasks/f',
+        title: 'Finished',
+        dueInDays: -5,
+        status: 'complete',
+        order: 6,
+      );
+      await pumpTasks(tester);
+
+      // Only unfinished tasks count as overdue.
+      expect(
+        find.bySemanticsLabel(RegExp('Overdue: due 2 days ago')),
+        findsOneWidget,
+      );
+      double top(String text) => tester.getTopLeft(find.text(text)).dy;
+      final order = [
+        'Overdue · 1',
+        'Late',
+        'Today · 1',
+        'Now',
+        'Upcoming · 2',
+        'Soon',
+        'Next week',
+        'No due date · 1',
+        'Someday',
+        'Done · 1',
+        'Finished',
+      ];
+      for (var i = 1; i < order.length; i++) {
+        await tester.scrollUntilVisible(find.text(order[i]), 100);
+        expect(top(order[i - 1]), lessThan(top(order[i])), reason: order[i]);
+      }
+      expect(
+        find.bySemanticsLabel(RegExp(r'(?<!Overdue: )Due 5 days ago')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('no headings when nothing has a due date', (tester) async {
+      await seedTask('tasks/a', title: 'Someday');
+      await pumpTasks(tester);
+
+      expect(find.textContaining('No due date'), findsNothing);
     });
   });
 }

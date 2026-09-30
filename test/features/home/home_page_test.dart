@@ -8,6 +8,7 @@ import 'package:taskly/features/projects/presentation/project_detail_page.dart';
 import 'package:taskly/features/tasks/presentation/task_card.dart';
 import 'package:taskly/features/tasks/presentation/tasks_page.dart';
 
+import '../../helpers/due_dates.dart';
 import '../../helpers/pump_app.dart';
 
 void main() {
@@ -20,6 +21,7 @@ void main() {
     required String title,
     String status = 'notStarted',
     double order = 1,
+    int? dueInDays,
   }) => firestore.doc('tasks/$id').set({
     'ownerId': testUser.uid,
     'title': title,
@@ -27,6 +29,7 @@ void main() {
     'priority': 'medium',
     'status': status,
     'assigneeId': null,
+    'dueDate': dueInDays == null ? null : dueTimestamp(dueInDays),
     'order': order,
     'createdAt': Timestamp.now(),
     'updatedAt': Timestamp.now(),
@@ -145,6 +148,19 @@ void main() {
         card.task.title,
     ];
     expect(titles, ['Task 1', 'Task 2', 'Task 3', 'Task 4', 'Task 5']);
+  });
+
+  testWidgets('up next puts the most urgent first', (tester) async {
+    await seedTask('a', title: 'Undated', order: 1);
+    await seedTask('b', title: 'Next week', dueInDays: 7, order: 2);
+    await seedTask('c', title: 'Late', dueInDays: -1, order: 3);
+    await pumpHome(tester);
+
+    final titles = [
+      for (final card in tester.widgetList<TaskCard>(find.byType(TaskCard)))
+        card.task.title,
+    ];
+    expect(titles, ['Late', 'Next week', 'Undated']);
   });
 
   testWidgets('ticking a task from home completes it', (tester) async {

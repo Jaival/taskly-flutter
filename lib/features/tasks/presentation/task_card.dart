@@ -10,6 +10,7 @@ import '../../../core/widgets/status_chip.dart';
 import '../../../core/widgets/undo_delete.dart';
 import '../data/task_repository.dart';
 import '../domain/task.dart';
+import 'due_date_label.dart';
 import 'task_form.dart';
 
 /// The [pendingDeletionsProvider] key for [task].
@@ -149,6 +150,8 @@ class TaskCard extends ConsumerWidget {
                         children: [
                           PriorityChip(task.priority),
                           StatusChip(task.status),
+                          if (task.dueDate != null)
+                            DueDateLabel(task, today: DateTime.now()),
                           if (members?[task.assigneeId] case final name?)
                             _Assignee(name),
                         ],

@@ -486,7 +486,7 @@ Three details:
 
 There are two test suites:
 
-- **Dart tests** (`test/`, 200 tests): run with `flutter test`. Takes a few seconds.
+- **Dart tests** (`test/`, 211 tests): run with `flutter test`. Takes a few seconds.
 - **Security rules tests** (`rules_test/`, 50 tests): run with `npm test` inside `rules_test/`. This starts the Firestore emulator, runs the tests, and stops it. If the emulators are already running (you'd get "port taken"), use them instead: `FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npm run test:only`. The tests load `firestore.rules` fresh each run. See [section 11](#11-firestore-primer-read-before-phase-2).
 
 ### The testing pyramid
@@ -733,6 +733,8 @@ Firestore also keeps a local cache, so the app can show data offline and queue w
 ### Timestamps
 
 Use `FieldValue.serverTimestamp()` for `createdAt` and `updatedAt`, not `DateTime.now()`. Device clocks are often wrong, and a rule can check that the client didn't fake the value.
+
+A **due date** is different: it's a calendar day, not a moment. A `Timestamp` is always a moment, so "due Friday" is stored as midnight UTC on Friday (`dueDateToFirestore` in [`task_firestore.dart`](lib/features/tasks/data/task_firestore.dart)) and read back by taking that UTC date's year, month and day. Storing local midnight instead would make the task due on Thursday for someone further west. Comparisons ("overdue", "in 3 days") use `daysUntil` in [`due_date.dart`](lib/features/tasks/domain/due_date.dart), which counts calendar days, so a daylight-saving change can't make a day 23 hours long.
 
 ### Indexes
 

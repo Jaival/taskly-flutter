@@ -222,7 +222,11 @@ Legacy: `Screens/LandingPage.dart`, `Widgets/LandingPage/*`, `Widgets/NavBar/*`,
 Tier A is what makes this feel like a real product. The rest is optional.
 
 ### Tier A: core productivity
-- [ ] **Due dates** with a date picker, an "Overdue / Today / Upcoming" grouping, and relative labels ("in 2 days").
+- [x] **Due dates** with a date picker, an "Overdue / Today / Upcoming" grouping, and relative labels ("in 2 days").
+  - An optional "Due date" field in the task form opens the date picker, with a button to clear it. A due date is a calendar day, stored as midnight UTC so it's the same day in every time zone (devops.md 11).
+  - Cards say "Today", "Tomorrow", "In 3 days", "2 days ago" or the date, in red with a different icon when overdue. Done tasks are never overdue.
+  - The Tasks page groups personal tasks into Overdue, Today, Upcoming (soonest first), No due date and Done. Without any due dates it stays a plain list. Home's "Up next" is the most urgent first.
+  - Project pages show the labels but keep their list order; the board view below groups them by status instead.
 - [ ] **Search, filter and sort** by priority, status, project and due date.
 - [ ] **Kanban board view** per project (Not Started / In Progress / Complete) with drag and drop, alongside the list view.
 - [ ] **Subtasks / checklists** inside a task, with a progress bar on project cards.

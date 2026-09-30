@@ -44,12 +44,11 @@ void main() {
     expect(saved.isPersonal, isTrue);
   });
 
-  test('due dates round-trip', () async {
-    final due = DateTime.utc(2026, 10, 1, 9);
+  test('due dates round-trip as the same calendar day', () async {
     final ref = personalTasksCollection(db).doc('t1');
-    await ref.set(task.copyWith(dueDate: () => due));
+    await ref.set(task.copyWith(dueDate: () => DateTime(2026, 10, 1, 23, 59)));
 
-    expect((await ref.get()).data()!.dueDate!.toUtc(), due);
+    expect((await ref.get()).data()!.dueDate, DateTime(2026, 10, 1));
   });
 
   test('copyWith can clear nullable fields', () {

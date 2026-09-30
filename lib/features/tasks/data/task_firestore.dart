@@ -38,7 +38,10 @@ Task taskFromFirestore(
     priority: Priority.fromName(data['priority']),
     status: TaskStatus.fromName(data['status']),
     assigneeId: data.stringOrNull('assigneeId'),
-    dueDate: data.dateTime('dueDate'),
+    dueDate: switch (data.dateTime('dueDate')?.toUtc()) {
+      null => null,
+      final utc => DateTime(utc.year, utc.month, utc.day),
+    },
     order: data.number('order'),
     createdAt: data.dateTime('createdAt'),
     updatedAt: data.dateTime('updatedAt'),
@@ -54,8 +57,14 @@ Map<String, Object?> taskToFirestore(Task task, SetOptions? _) => {
   'priority': task.priority.name,
   'status': task.status.name,
   'assigneeId': task.assigneeId,
-  'dueDate': timestampOrNull(task.dueDate),
+  'dueDate': dueDateToFirestore(task.dueDate),
   'order': task.order,
   'createdAt': createdAtValue(task.createdAt),
   'updatedAt': FieldValue.serverTimestamp(),
 };
+
+/// A due date is a calendar day, stored as midnight UTC on that day. Read
+/// back as that day in local time, it's the same day in every time zone.
+Timestamp? dueDateToFirestore(DateTime? due) => due == null
+    ? null
+    : Timestamp.fromDate(DateTime.utc(due.year, due.month, due.day));
