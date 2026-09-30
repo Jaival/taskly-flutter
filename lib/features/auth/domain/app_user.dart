@@ -18,6 +18,12 @@ class AppUser {
   /// Needed to accept project invites.
   final bool emailVerified;
 
+  /// The first word of the display name, for greetings. Null if unnamed.
+  String? get firstName {
+    final name = displayName?.trim() ?? '';
+    return name.isEmpty ? null : name.split(RegExp(r'\s+')).first;
+  }
+
   /// Up to two initials for avatars, falling back to the email.
   String get initials {
     final source = (displayName?.trim().isNotEmpty ?? false)

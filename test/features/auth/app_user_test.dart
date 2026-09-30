@@ -17,4 +17,16 @@ void main() {
       expect(const AppUser(uid: '1').initials, '?');
     });
   });
+
+  group('AppUser.firstName', () {
+    test('is the first word of the display name', () {
+      const user = AppUser(uid: '1', displayName: '  Ada   Lovelace ');
+      expect(user.firstName, 'Ada');
+    });
+
+    test('is null without a display name', () {
+      expect(const AppUser(uid: '1', displayName: ' ').firstName, isNull);
+      expect(const AppUser(uid: '1').firstName, isNull);
+    });
+  });
 }

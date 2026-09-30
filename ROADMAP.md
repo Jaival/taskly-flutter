@@ -177,8 +177,8 @@ Legacy: `Screens/Tasks.dart`, `Widgets/Tasks/*`, `Shared/CustomTile.dart`, `Shar
 ### 3.5 Home dashboard
 Legacy: `Screens/Home.dart`, `Widgets/Home/*`
 
-- [ ] Overview of recent projects and tasks, and counts (open, in progress, done).
-- [ ] Works on every screen size. The old home screen was a fixed desktop `Row` sized as `width / 5`.
+- [x] Overview of recent projects and tasks, and counts (open, in progress, done). Each count opens its list, "Up next" shows the first five open personal tasks (tick them off right there), and "Recent projects" the four changed most recently. A new account gets a welcome with "Create a project" and "Add a task" instead of rows of zeros.
+- [x] Works on every screen size. The old home screen was a fixed desktop `Row` sized as `width / 5`. Counts are two by two on phones and four in a row from 600px; the two lists sit side by side from 900px.
 
 ### 3.6 Sharing
 Legacy: `Screens/SharedTask.dart`, `Widgets/SharedTask/*`, `Model/SharedTaskModel.dart`
