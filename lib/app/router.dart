@@ -14,6 +14,7 @@ import '../features/projects/presentation/project_detail_page.dart';
 import '../features/projects/presentation/projects_page.dart';
 import '../features/projects/presentation/shared_page.dart';
 import '../features/tasks/presentation/tasks_page.dart';
+import '../core/widgets/page_title.dart';
 import 'app_shell.dart';
 import 'not_found_page.dart';
 
@@ -42,23 +43,28 @@ final routerProvider = Provider<GoRouter>((ref) {
     refreshListenable: refresh,
     redirect: (context, state) =>
         authRedirect(signedIn: auth.currentUser != null, uri: state.uri),
-    errorBuilder: (context, state) => const NotFoundPage(),
+    errorBuilder: (context, state) =>
+        const PageTitle('Page not found', child: NotFoundPage()),
     routes: [
       GoRoute(
         path: Routes.landing,
-        builder: (context, state) => const LandingPage(),
+        builder: (context, state) =>
+            const PageTitle(null, child: LandingPage()),
       ),
       GoRoute(
         path: Routes.login,
-        builder: (context, state) => const LoginPage(),
+        builder: (context, state) =>
+            const PageTitle('Log in', child: LoginPage()),
       ),
       GoRoute(
         path: Routes.signUp,
-        builder: (context, state) => const SignUpPage(),
+        builder: (context, state) =>
+            const PageTitle('Sign up', child: SignUpPage()),
       ),
       GoRoute(
         path: Routes.profile,
-        builder: (context, state) => const ProfilePage(),
+        builder: (context, state) =>
+            const PageTitle('Profile', child: ProfilePage()),
       ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) => AppShell(
@@ -68,9 +74,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           showAppBar: state.uri.pathSegments.length <= 1,
         ),
         branches: [
-          _branch(Routes.home, const HomePage()),
+          _branch(Routes.home, 'Home', const HomePage()),
           _branch(
             Routes.projects,
+            'Projects',
             const ProjectsPage(),
             routes: [
               GoRoute(
@@ -80,8 +87,8 @@ final routerProvider = Provider<GoRouter>((ref) {
               ),
             ],
           ),
-          _branch(Routes.tasks, const TasksPage()),
-          _branch(Routes.shared, const SharedPage()),
+          _branch(Routes.tasks, 'Tasks', const TasksPage()),
+          _branch(Routes.shared, 'Shared', const SharedPage()),
         ],
       ),
     ],
@@ -96,11 +103,16 @@ final routerProvider = Provider<GoRouter>((ref) {
 
 StatefulShellBranch _branch(
   String path,
+  String title,
   Widget page, {
   List<RouteBase> routes = const [],
 }) => StatefulShellBranch(
   routes: [
-    GoRoute(path: path, builder: (context, state) => page, routes: routes),
+    GoRoute(
+      path: path,
+      builder: (context, state) => PageTitle(title, child: page),
+      routes: routes,
+    ),
   ],
 );
 

@@ -6,6 +6,7 @@ import '../../../app/router.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/error_state.dart';
+import '../../../core/widgets/page_title.dart';
 import '../../../core/widgets/priority_chip.dart';
 import '../../../core/widgets/status_chip.dart';
 import '../../../core/widgets/undo_delete.dart';
@@ -33,42 +34,49 @@ class ProjectDetailPage extends ConsumerWidget {
     );
     final uid = ref.watch(authStateProvider).value?.uid ?? '';
 
-    return Scaffold(
-      appBar: AppBar(
-        // Opened by URL there's nothing to pop, so go to the list instead.
-        leading: BackButton(
-          onPressed: () =>
-              context.canPop() ? context.pop() : context.go(Routes.projects),
-        ),
-        title: Text(project.value?.name ?? ''),
-        actions: [
-          if (project.value case final project? when !isBeingDeleted)
-            ProjectActionsMenu(
-              project: project,
-              uid: uid,
-              onGone: () {
-                if (context.mounted) context.go(Routes.projects);
-              },
-            ),
-        ],
-      ),
-      body: switch (project) {
-        AsyncData(value: final project?) when !isBeingDeleted =>
-          _ProjectDetails(project: project),
-        AsyncData() => EmptyState(
-          icon: Icons.folder_off_outlined,
-          title: 'Project not found',
-          message: "It may have been deleted, or you're not a member.",
-          action: FilledButton(
-            onPressed: () => context.go(Routes.projects),
-            child: const Text('Back to projects'),
-          ),
-        ),
-        AsyncError() => ErrorState(
-          onRetry: () => ref.invalidate(projectProvider(projectId)),
-        ),
-        _ => const Center(child: CircularProgressIndicator()),
+    return PageTitle(
+      switch (project) {
+        AsyncData(value: final project?) => project.name,
+        AsyncData() => 'Project not found',
+        _ => 'Project',
       },
+      child: Scaffold(
+        appBar: AppBar(
+          // Opened by URL there's nothing to pop, so go to the list instead.
+          leading: BackButton(
+            onPressed: () =>
+                context.canPop() ? context.pop() : context.go(Routes.projects),
+          ),
+          title: Text(project.value?.name ?? ''),
+          actions: [
+            if (project.value case final project? when !isBeingDeleted)
+              ProjectActionsMenu(
+                project: project,
+                uid: uid,
+                onGone: () {
+                  if (context.mounted) context.go(Routes.projects);
+                },
+              ),
+          ],
+        ),
+        body: switch (project) {
+          AsyncData(value: final project?) when !isBeingDeleted =>
+            _ProjectDetails(project: project),
+          AsyncData() => EmptyState(
+            icon: Icons.folder_off_outlined,
+            title: 'Project not found',
+            message: "It may have been deleted, or you're not a member.",
+            action: FilledButton(
+              onPressed: () => context.go(Routes.projects),
+              child: const Text('Back to projects'),
+            ),
+          ),
+          AsyncError() => ErrorState(
+            onRetry: () => ref.invalidate(projectProvider(projectId)),
+          ),
+          _ => const Center(child: CircularProgressIndicator()),
+        },
+      ),
     );
   }
 }

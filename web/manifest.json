@@ -5,7 +5,7 @@
     "display": "standalone",
     "background_color": "#54458D",
     "theme_color": "#54458D",
-    "description": "Taskly: plan projects and tasks with your team.",
+    "description": "Plan projects, tick off tasks and share the work with your team.",
     "orientation": "any",
     "prefer_related_applications": false,
     "icons": [
