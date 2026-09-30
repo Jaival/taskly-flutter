@@ -166,14 +166,15 @@ taskly-flutter/
 │       ├── projects/  tasks/  sharing/  profile/
 │       │   ├── domain/       ← Project, Task, Invite, UserProfile
 │       │   ├── data/         ← *_firestore.dart: typed collections + converters
-│       │   └── presentation/ ← placeholder pages for now
+│       │   └── presentation/ ← pages and widgets
 │       └── home/  landing/
 │           └── presentation/
 ├── test/                     ← mirrors lib/ (test/app ↔ lib/app, etc.)
 │   └── helpers/              ← fakes and pumpApp(), shared by all tests
-├── legacy/lib/               ← the v1 code, read-only reference, excluded from analysis
 ├── web/  android/  ios/  macos/  windows/   ← platform "host" projects
-├── assets/images/            ← images bundled into the app
+├── assets/images/            ← images bundled into the app (landing page screenshots)
+├── assets/icon/              ← app icon sources; `dart run flutter_launcher_icons` sizes them
+├── tool/                     ← one-off scripts (make_icons.py draws the icon)
 ├── .github/workflows/main.yml ← CI/CD pipeline
 ├── pubspec.yaml              ← dependencies and app metadata
 ├── pubspec.lock              ← exact resolved versions (committed)
@@ -250,9 +251,9 @@ CollectionReference<Project> projectsCollection(FirebaseFirestore db) => db
 
 We chose hand-written classes over code generators like `freezed` and `json_serializable`. There are only four models, and Dart 3 patterns keep the parsing short. Generators pay off with dozens of models, at the cost of a build step and generated files to read around.
 
-### Why is `legacy/` there?
+### Where did the v1 code go?
 
-The v1 code isn't null-safe, so it can't compile alongside Dart 3 code. Moving it to `legacy/lib/` and adding `legacy/**` to `analyzer.exclude` in `analysis_options.yaml` keeps it readable as a reference without breaking the build. Each file gets deleted once its feature is rewritten, and the whole folder goes at the end of Phase 3.
+The v1 code wasn't null-safe, so it couldn't compile alongside Dart 3 code. During Phase 3 it lived in `legacy/lib/`, excluded from analysis, as a reference; each file was deleted once its feature was rewritten, and the folder went at the end of Phase 3. To read it now, check out any commit from before then.
 
 ### The platform folders
 
@@ -485,7 +486,7 @@ Three details:
 
 There are two test suites:
 
-- **Dart tests** (`test/`, 51 tests): run with `flutter test`. Takes a few seconds.
+- **Dart tests** (`test/`, 198 tests): run with `flutter test`. Takes a few seconds.
 - **Security rules tests** (`rules_test/`, 50 tests): run with `npm test` inside `rules_test/`. This starts the Firestore emulator, runs the tests, and stops it. If the emulators are already running (you'd get "port taken"), use them instead: `FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npm run test:only`. The tests load `firestore.rules` fresh each run. See [section 11](#11-firestore-primer-read-before-phase-2).
 
 ### The testing pyramid
@@ -506,9 +507,14 @@ There are two test suites:
 | `test/app/router_test.dart` → `authRedirect` group | Unit | Every redirect rule, including the open-redirect guard |
 | `test/app/router_test.dart` → `navigation` group | Widget | Deep links, sign-in continues to the target, sign-out, 404 |
 | `test/app/app_shell_test.dart` | Widget | Right nav widget at each width, tabs switch, profile back button |
+| `test/app/page_title_test.dart` | Widget | The browser title follows the visible page, including after Back and tab switches |
+| `test/app/accessibility_test.dart` | Widget | Every main page in light and dark mode meets Flutter's contrast, tap-target and label guidelines; nothing overflows with text at 200%; logging in and ticking off a task work with only a keyboard |
 | `test/core/dialogs_test.dart` | Widget | Sheet vs dialog by width, confirm returns true/false |
 | `test/core/domain/enums_test.dart` | Unit | Enum parsing and fallbacks, one colour per priority |
 | `test/features/*/…_test.dart` (projects, tasks, sharing, profile) | Unit | Models, and converters round-tripping through `FakeFirebaseFirestore` (including malformed documents) |
+| `test/features/*/…_repository_test.dart` | Unit | Each repository's reads and writes against `FakeFirebaseFirestore` |
+| `test/features/*/…_page_test.dart`, `sharing_test.dart` | Widget | Each feature's pages, forms and cards through the real app: create, edit, delete with Undo, roles, invites, layouts at phone and desktop widths |
+| `test/features/projects/project_provider_test.dart` | Unit | Per-project listeners restart after a switch of account or a join (section 5.2) |
 | `rules_test/firestore.test.js` | Integration | Every security rule, allowed *and* denied cases, against the real rules engine in the emulator |
 
 ### Fakes, not mocks
@@ -545,7 +551,7 @@ test("an editor can't change roles", async () => {
 
 ### Rule of thumb
 
-Every bug you fix gets a test that would have caught it. The v1 bugs listed in the roadmap (like the sharing bug and the endless delete listener) are the kind of thing Phase 3's repository tests should pin down.
+Every bug you fix gets a test that would have caught it. The v1 bugs listed in the roadmap and the ones found on a device in Phase 3 have tests: see "choosing a priority keeps what was typed", "deleting a project deletes its tasks, and nobody else's", `retried deletes` in the rules tests, and `project_provider_test.dart`.
 
 ---
 
@@ -668,10 +674,9 @@ This is the pattern every Phase 3 rewrite follows. Using "projects" as the examp
 2. **Repository:** `features/projects/data/project_repository.dart`. The *only* file that imports `cloud_firestore` for projects. It converts Firestore documents into `Project`s and back, and exposes methods like `watchProjects()`, `create()`, `update()` and `delete()`.
 3. **Providers:** next to the repository. For example `projectRepositoryProvider`, and `projectsProvider` as a `StreamProvider<List<Project>>`.
 4. **Presentation:** `features/projects/presentation/`. The page `ref.watch`es the providers and `switch`es on `AsyncValue` for loading, error, empty and data states. It uses `core/widgets` and theme tokens, never raw colours.
-5. **Route:** add the path to `Routes` and a `GoRoute` in `router.dart`. Nested paths like `/projects/:id` go under the projects branch.
+5. **Route:** add the path to `Routes` and a `GoRoute` in `router.dart`, wrapped in `PageTitle('…')` so the browser tab is named. Nested paths like `/projects/:id` go under the projects branch.
 6. **Tests:** repository tests with `fake_cloud_firestore`, and widget tests with `pumpApp` plus an overridden repository provider.
-7. **Delete the legacy files** this feature replaces (they're listed per feature in the roadmap).
-8. **Run the checks** (`dart format`, `flutter analyze`, `flutter test`), then open a PR.
+7. **Run the checks** (`dart format`, `flutter analyze`, `flutter test`), then open a PR.
 
 ---
 

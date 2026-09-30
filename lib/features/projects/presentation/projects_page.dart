@@ -90,9 +90,9 @@ class _ProjectGrid extends StatelessWidget {
           sliver: SliverGrid(
             // As many columns as fit at up to 360px each: one on phones,
             // two on tablets, three or more on desktops.
-            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+            gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
               maxCrossAxisExtent: 360,
-              mainAxisExtent: 184,
+              mainAxisExtent: ProjectCard.heightFor(context),
               mainAxisSpacing: AppSpacing.sm,
               crossAxisSpacing: AppSpacing.sm,
             ),

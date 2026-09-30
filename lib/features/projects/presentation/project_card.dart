@@ -16,6 +16,11 @@ class ProjectCard extends ConsumerWidget {
 
   final Project project;
 
+  /// The height to give each card in a grid: 184 at normal text size, and
+  /// taller as the user's text gets bigger (the text is about half of it).
+  static double heightFor(BuildContext context) =>
+      88 + MediaQuery.textScalerOf(context).scale(96);
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
@@ -70,7 +75,7 @@ class ProjectCard extends ConsumerWidget {
               const Spacer(),
               Row(
                 children: [
-                  StatusChip(project.status),
+                  Flexible(child: StatusChip(project.status)),
                   const Spacer(),
                   if (others > 0)
                     Tooltip(

@@ -26,7 +26,13 @@ class StatusChip extends StatelessWidget {
         // Icon shape, not just colour, tells the statuses apart.
         Icon(iconFor(status), size: 16, color: color),
         const SizedBox(width: AppSpacing.xs),
-        Text(status.label, style: theme.textTheme.labelMedium),
+        Flexible(
+          child: Text(
+            status.label,
+            style: theme.textTheme.labelMedium,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
       ],
     );
   }

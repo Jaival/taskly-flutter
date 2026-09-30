@@ -111,9 +111,9 @@ class SharedPage extends ConsumerWidget {
           ),
           sliver: SliverGrid(
             // The same grid as the projects page.
-            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+            gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
               maxCrossAxisExtent: 360,
-              mainAxisExtent: 184,
+              mainAxisExtent: ProjectCard.heightFor(context),
               mainAxisSpacing: AppSpacing.sm,
               crossAxisSpacing: AppSpacing.sm,
             ),
