@@ -398,6 +398,10 @@ describe('project tasks', () => {
       title: 'Renamed',
       updatedAt: serverTimestamp(),
     }));
+    await assertFails(updateDoc(doc(db, 'projects/p1/tasks/t1'), {
+      checklist: [{ text: 'Step', done: true }],
+      updatedAt: serverTimestamp(),
+    }));
   });
 
   test('editors can delete tasks, viewers cannot', async () => {
@@ -416,6 +420,19 @@ describe('personal tasks', () => {
     const db = as('dave');
     await assertSucceeds(getDocs(query(collection(db, 'tasks'), where('ownerId', '==', 'dave'))));
     await assertFails(getDocs(collection(db, 'tasks')));
+  });
+
+  test('a checklist must be a list of at most 50 items', async () => {
+    const db = as('dave');
+    const steps = (n) => Array.from({ length: n }, (_, i) => ({ text: `Step ${i}`, done: false }));
+    await assertSucceeds(setDoc(doc(db, 'tasks/new'), task({ ownerId: 'dave', checklist: steps(50) })));
+    await assertFails(setDoc(doc(db, 'tasks/new2'), task({ ownerId: 'dave', checklist: steps(51) })));
+    await assertFails(setDoc(doc(db, 'tasks/new3'), task({ ownerId: 'dave', checklist: 'Step 1' })));
+    // Older tasks have no checklist at all, and stay valid.
+    await assertSucceeds(updateDoc(doc(db, 'tasks/personal1'), {
+      title: 'Renamed',
+      updatedAt: serverTimestamp(),
+    }));
   });
 
   test("a user can't create a task for someone else", async () => {

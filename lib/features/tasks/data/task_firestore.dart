@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/data/firestore_fields.dart';
 import '../../../core/domain/priority.dart';
 import '../../../core/domain/task_status.dart';
+import '../domain/checklist_item.dart';
 import '../domain/task.dart';
 
 /// Tasks in one project: `projects/{projectId}/tasks`.
@@ -42,6 +43,7 @@ Task taskFromFirestore(
       null => null,
       final utc => DateTime(utc.year, utc.month, utc.day),
     },
+    checklist: checklistFromFirestore(data['checklist']),
     order: data.number('order'),
     createdAt: data.dateTime('createdAt'),
     updatedAt: data.dateTime('updatedAt'),
@@ -58,6 +60,7 @@ Map<String, Object?> taskToFirestore(Task task, SetOptions? _) => {
   'status': task.status.name,
   'assigneeId': task.assigneeId,
   'dueDate': dueDateToFirestore(task.dueDate),
+  'checklist': checklistToFirestore(task.checklist),
   'order': task.order,
   'createdAt': createdAtValue(task.createdAt),
   'updatedAt': FieldValue.serverTimestamp(),
@@ -68,3 +71,18 @@ Map<String, Object?> taskToFirestore(Task task, SetOptions? _) => {
 Timestamp? dueDateToFirestore(DateTime? due) => due == null
     ? null
     : Timestamp.fromDate(DateTime.utc(due.year, due.month, due.day));
+
+/// A checklist is stored as a list of `{text, done}` maps. Items that aren't
+/// maps are skipped, and missing fields get defaults, as for every field.
+List<ChecklistItem> checklistFromFirestore(Object? value) => switch (value) {
+  final List<Object?> items => [
+    for (final item in items)
+      if (item case final Map<String, Object?> fields)
+        ChecklistItem(fields.string('text'), done: fields['done'] == true),
+  ],
+  _ => const [],
+};
+
+List<Map<String, Object?>> checklistToFirestore(List<ChecklistItem> items) => [
+  for (final item in items) {'text': item.text, 'done': item.done},
+];

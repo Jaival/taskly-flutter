@@ -12,7 +12,9 @@ import '../../../core/widgets/priority_status_fields.dart';
 import '../../../core/widgets/progress_button.dart';
 import '../../auth/data/auth_repository.dart';
 import '../data/task_repository.dart';
+import '../domain/checklist_item.dart';
 import '../domain/task.dart';
+import 'checklist_editor.dart';
 import 'due_date_label.dart';
 
 /// Opens the form to edit [task], or to add a task to the project with
@@ -60,6 +62,7 @@ class _TaskFormState extends ConsumerState<TaskForm> {
   late Priority _priority = widget.task?.priority ?? Priority.medium;
   late TaskStatus _status = widget.task?.status ?? TaskStatus.notStarted;
   late DateTime? _dueDate = widget.task?.dueDate;
+  late List<ChecklistItem> _checklist = widget.task?.checklist ?? const [];
   // Shows _dueDate; the field is read-only and opens a date picker.
   final _dueText = TextEditingController();
   // Someone who has left the project shows as unassigned.
@@ -123,6 +126,7 @@ class _TaskFormState extends ConsumerState<TaskForm> {
           priority: _priority,
           status: _status,
           dueDate: _dueDate,
+          checklist: _checklist,
           assigneeId: widget.members == null ? null : () => _assigneeId,
         );
       } else {
@@ -134,6 +138,7 @@ class _TaskFormState extends ConsumerState<TaskForm> {
           priority: _priority,
           assigneeId: _assigneeId,
           dueDate: _dueDate,
+          checklist: _checklist,
         );
       }
       if (mounted) Navigator.pop(context, true);
@@ -243,6 +248,11 @@ class _TaskFormState extends ConsumerState<TaskForm> {
                 onChanged: (value) => setState(() => _assigneeId = value),
               ),
             ],
+            const SizedBox(height: AppSpacing.md),
+            ChecklistEditor(
+              initial: _checklist,
+              onChanged: (items) => _checklist = items,
+            ),
             if (_error case final error?) ...[
               const SizedBox(height: AppSpacing.md),
               FormError(error),

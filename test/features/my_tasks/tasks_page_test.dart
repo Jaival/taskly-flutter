@@ -569,4 +569,72 @@ void main() {
       );
     });
   });
+
+  group('checklists', () {
+    testWidgets('items are added in the form and counted on the card', (
+      tester,
+    ) async {
+      await pumpTasks(tester);
+      await tester.tap(find.text('New task'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Title'),
+        'Launch post',
+      );
+
+      await tester.tap(find.text('Add an item'));
+      await tester.pumpAndSettle();
+      // The new item has focus: type, and Enter adds the next.
+      tester.testTextInput.enterText('Draft');
+      await tester.testTextInput.receiveAction(TextInputAction.next);
+      await tester.pumpAndSettle();
+      tester.testTextInput.enterText('Publish');
+      await tester.pumpAndSettle();
+      await tester.tap(find.bySemanticsLabel('Done: Draft'));
+      await tester.pumpAndSettle();
+      expect(find.text('Checklist · 1/2'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Add task'));
+      await tester.pumpAndSettle();
+
+      expect((await onlyTaskIn('tasks'))['checklist'], [
+        {'text': 'Draft', 'done': true},
+        {'text': 'Publish', 'done': false},
+      ]);
+      expect(
+        find.descendant(of: cardFor('Launch post'), matching: find.text('1/2')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('an item can be removed', (tester) async {
+      await firestore.doc('tasks/a').set({
+        'ownerId': testUser.uid,
+        'title': 'Launch post',
+        'description': '',
+        'priority': 'medium',
+        'status': 'notStarted',
+        'checklist': [
+          {'text': 'Draft', 'done': false},
+          {'text': 'Publish', 'done': false},
+        ],
+        'order': 1,
+        'createdAt': Timestamp.now(),
+        'updatedAt': Timestamp.now(),
+      });
+      await pumpTasks(tester);
+
+      await tester.tap(find.text('Launch post'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Remove "Draft"'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await tester.pumpAndSettle();
+
+      expect((await onlyTaskIn('tasks'))['checklist'], [
+        {'text': 'Publish', 'done': false},
+      ]);
+      expect(find.text('0/1'), findsOneWidget);
+    });
+  });
 }

@@ -6,6 +6,7 @@ import '../../../core/data/firestore_provider.dart';
 import '../../../core/domain/priority.dart';
 import '../../../core/domain/task_status.dart';
 import '../../auth/data/auth_repository.dart';
+import '../domain/checklist_item.dart';
 import '../domain/task.dart';
 import 'task_firestore.dart';
 
@@ -55,6 +56,7 @@ class TaskRepository {
     Priority priority = Priority.medium,
     String? assigneeId,
     DateTime? dueDate,
+    List<ChecklistItem> checklist = const [],
   }) async {
     final doc = _collection(projectId).doc();
     await doc.set(
@@ -67,6 +69,7 @@ class TaskRepository {
         priority: priority,
         assigneeId: assigneeId,
         dueDate: dueDate,
+        checklist: _tidy(checklist),
         // Later tasks sort after earlier ones, without reading the list to
         // find the current last position.
         order: _clock().millisecondsSinceEpoch.toDouble(),
@@ -84,6 +87,7 @@ class TaskRepository {
     required Priority priority,
     required TaskStatus status,
     required DateTime? dueDate,
+    List<ChecklistItem>? checklist,
     ValueGetter<String?>? assigneeId,
   }) => _doc(task).update({
     'title': title.trim(),
@@ -91,6 +95,7 @@ class TaskRepository {
     'priority': priority.name,
     'status': status.name,
     'dueDate': dueDateToFirestore(dueDate),
+    if (checklist != null) 'checklist': checklistToFirestore(_tidy(checklist)),
     // Only when given: personal tasks have no assignee field in the form.
     // `() => null` unassigns.
     if (assigneeId != null) 'assigneeId': assigneeId(),
@@ -104,6 +109,13 @@ class TaskRepository {
   ).update({'status': status.name, 'updatedAt': FieldValue.serverTimestamp()});
 
   Future<void> deleteTask(Task task) => _doc(task).delete();
+
+  /// Trimmed, without blank items.
+  static List<ChecklistItem> _tidy(List<ChecklistItem> items) => [
+    for (final item in items)
+      if (item.text.trim() case final text when text.isNotEmpty)
+        item.copyWith(text: text),
+  ];
 }
 
 final taskRepositoryProvider = Provider<TaskRepository>(

@@ -280,8 +280,8 @@ service cloud.firestore {
     // Shape every stored task must satisfy, personal or in a project.
     function isValidTask(data) {
       return data.keys().hasOnly(['ownerId', 'title', 'description',
-               'priority', 'status', 'assigneeId', 'dueDate', 'order',
-               'createdAt', 'updatedAt'])
+               'priority', 'status', 'assigneeId', 'dueDate', 'checklist',
+               'order', 'createdAt', 'updatedAt'])
           && data.title is string
           && data.title.size() > 0 && data.title.size() <= 200
           && data.description is string && data.description.size() <= 5000
@@ -290,6 +290,10 @@ service cloud.firestore {
           && (data.get('assigneeId', null) == null
               || data.assigneeId is string)
           && (data.get('dueDate', null) == null || data.dueDate is timestamp)
+          // Rules can't loop over a list, so only its size is checked; the
+          // app skips items of the wrong shape when reading.
+          && (data.get('checklist', []) is list
+              && data.get('checklist', []).size() <= 50)
           && data.order is number;
     }
 

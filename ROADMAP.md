@@ -237,7 +237,11 @@ Tier A is what makes this feel like a real product. The rest is optional.
   - Drag a card to another column to change its status: press and hold first on touch screens (so swiping still scrolls), a plain drag with a mouse. Each card's menu has "Move to …" and Delete, which also works from a keyboard or screen reader.
   - Viewers can move only the tasks assigned to them, as the rules allow. Moving changes the status only; reordering within a column isn't supported yet.
   - Known gap: on a phone you can't drag into a column that's scrolled out of view (no auto-scroll while dragging). The card menu covers it.
-- [ ] **Subtasks / checklists** inside a task, with a progress bar on project cards.
+- [x] **Subtasks / checklists** inside a task, with a progress bar on project cards.
+  - A "Checklist" section in the task form: add items (Enter adds the next one), tick, rename and remove them. Blank items are dropped on save.
+  - Stored as a list of `{text, done}` inside the task document, so a task and its checklist arrive in one read. The rules cap it at 50 items (devops.md 11). Viewers can't change a checklist, as with every field but the status.
+  - Task and board cards show "2/5" beside the due date. Project cards show a bar and "3/8" of their tasks done; cards without tasks show nothing.
+  - Project cards are a little taller (220), which also fixes a two-line name with a two-line description overflowing the old card. The status label on a narrow card is no longer cut short ("In pro…").
 - [ ] **Dashboard stats:** overdue count, done this week, and a small completion chart.
 - [ ] **Keyboard shortcuts** on desktop web (`N` for new task, `/` for search, `Esc` to close) via `Shortcuts`/`Actions`.
 

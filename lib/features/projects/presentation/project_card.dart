@@ -8,6 +8,7 @@ import '../../../core/widgets/priority_chip.dart';
 import '../../../core/widgets/skeleton.dart';
 import '../../../core/widgets/status_chip.dart';
 import '../../auth/data/auth_repository.dart';
+import '../../tasks/data/task_repository.dart';
 import '../domain/project.dart';
 import 'project_actions_menu.dart';
 
@@ -16,16 +17,20 @@ class ProjectCard extends ConsumerWidget {
 
   final Project project;
 
-  /// The height to give each card in a grid: 184 at normal text size, and
+  /// The height to give each card in a grid: 220 at normal text size, and
   /// taller as the user's text gets bigger (the text is about half of it).
+  /// Room for the fullest card: a two-line name, a two-line description and
+  /// the progress bar.
   static double heightFor(BuildContext context) =>
-      88 + MediaQuery.textScalerOf(context).scale(96);
+      108 + MediaQuery.textScalerOf(context).scale(112);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final uid = ref.watch(authStateProvider).value?.uid ?? '';
     final others = project.memberIds.length - 1;
+    // Listens to the project's tasks; only cards on screen are built.
+    final tasks = ref.watch(projectTasksProvider(project.id)).value;
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -73,10 +78,27 @@ class ProjectCard extends ConsumerWidget {
                 ),
               ],
               const Spacer(),
+              if (tasks != null && tasks.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(
+                    right: AppSpacing.sm,
+                    bottom: AppSpacing.sm,
+                  ),
+                  child: _TaskProgress(
+                    done: tasks.where((task) => task.isComplete).length,
+                    total: tasks.length,
+                  ),
+                ),
               Row(
                 children: [
-                  Flexible(child: StatusChip(project.status)),
-                  const Spacer(),
+                  // All the room that's left, so the label isn't cut short
+                  // on narrow cards.
+                  Expanded(
+                    child: Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: StatusChip(project.status),
+                    ),
+                  ),
                   if (others > 0)
                     Tooltip(
                       message:
@@ -103,6 +125,40 @@ class ProjectCard extends ConsumerWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// How many of the project's tasks are done, as a bar and "3/8".
+class _TaskProgress extends StatelessWidget {
+  const _TaskProgress({required this.done, required this.total});
+
+  final int done;
+  final int total;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Semantics(
+      label: '$done of $total tasks done',
+      excludeSemantics: true,
+      child: Row(
+        children: [
+          Expanded(
+            child: LinearProgressIndicator(
+              value: done / total,
+              borderRadius: AppRadius.smAll,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Text(
+            '$done/$total',
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
       ),
     );
   }

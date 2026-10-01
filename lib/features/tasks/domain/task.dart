@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../../core/domain/priority.dart';
 import '../../../core/domain/task_status.dart';
+import 'checklist_item.dart';
 
 /// A task, either in a project (`projects/{projectId}/tasks/{id}`) or
 /// personal (`tasks/{id}`).
@@ -17,6 +18,7 @@ class Task {
     this.status = TaskStatus.notStarted,
     this.assigneeId,
     this.dueDate,
+    this.checklist = const [],
     this.order = 0,
     this.createdAt,
     this.updatedAt,
@@ -37,6 +39,12 @@ class Task {
   final TaskStatus status;
   final String? assigneeId;
   final DateTime? dueDate;
+
+  /// Smaller steps inside the task, in order.
+  final List<ChecklistItem> checklist;
+
+  /// How many [checklist] items are ticked.
+  int get checklistDone => checklist.where((item) => item.done).length;
 
   /// Sort position within a list. A double, so a task dragged between two
   /// others can take the midpoint without renumbering the rest.
@@ -59,6 +67,7 @@ class Task {
     TaskStatus? status,
     ValueGetter<String?>? assigneeId,
     ValueGetter<DateTime?>? dueDate,
+    List<ChecklistItem>? checklist,
     double? order,
   }) => Task(
     id: id,
@@ -70,6 +79,7 @@ class Task {
     status: status ?? this.status,
     assigneeId: assigneeId != null ? assigneeId() : this.assigneeId,
     dueDate: dueDate != null ? dueDate() : this.dueDate,
+    checklist: checklist ?? this.checklist,
     order: order ?? this.order,
     createdAt: createdAt,
     updatedAt: updatedAt,
@@ -87,6 +97,7 @@ class Task {
       other.status == status &&
       other.assigneeId == assigneeId &&
       other.dueDate == dueDate &&
+      listEquals(other.checklist, checklist) &&
       other.order == order &&
       other.createdAt == createdAt &&
       other.updatedAt == updatedAt;
@@ -102,6 +113,7 @@ class Task {
     status,
     assigneeId,
     dueDate,
+    Object.hashAll(checklist),
     order,
     createdAt,
     updatedAt,

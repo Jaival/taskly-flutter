@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:taskly/core/domain/priority.dart';
 import 'package:taskly/core/domain/task_status.dart';
 import 'package:taskly/features/tasks/data/task_repository.dart';
+import 'package:taskly/features/tasks/domain/checklist_item.dart';
 
 void main() {
   late FakeFirebaseFirestore db;
@@ -95,7 +96,8 @@ void main() {
     final after = (await db.doc('tasks/${task.id}').get()).data()!;
     final changed = {
       for (final key in after.keys)
-        if (after[key] != before[key]) key,
+        // equals() compares lists and maps by content.
+        if (!equals(before[key]).matches(after[key], {})) key,
     };
     expect(after['status'], 'complete');
     expect(changed, contains('status'));
@@ -165,5 +167,34 @@ void main() {
     expect(await due(), DateTime(2026, 12, 25));
     await setDue(null);
     expect(await due(), isNull);
+  });
+
+  test('a checklist is saved trimmed, without blank items', () async {
+    await repository.createTask(
+      ownerId: 'alice',
+      title: 'x',
+      checklist: const [
+        ChecklistItem('  Draft '),
+        ChecklistItem('   '),
+        ChecklistItem('Review', done: true),
+      ],
+    );
+    final task = (await repository.watchPersonalTasks('alice').first).single;
+    expect(task.checklist, const [
+      ChecklistItem('Draft'),
+      ChecklistItem('Review', done: true),
+    ]);
+
+    await repository.updateDetails(
+      task,
+      title: 'x',
+      description: '',
+      priority: Priority.medium,
+      status: TaskStatus.notStarted,
+      dueDate: null,
+      checklist: const [ChecklistItem('Draft', done: true)],
+    );
+    final saved = (await repository.watchPersonalTasks('alice').first).single;
+    expect(saved.checklist, const [ChecklistItem('Draft', done: true)]);
   });
 }

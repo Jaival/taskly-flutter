@@ -10,6 +10,7 @@ import '../../../core/widgets/status_chip.dart';
 import '../../../core/widgets/undo_delete.dart';
 import '../data/task_repository.dart';
 import '../domain/task.dart';
+import 'checklist_progress.dart';
 import 'due_date_label.dart';
 import 'task_form.dart';
 
@@ -157,6 +158,8 @@ class TaskCard extends ConsumerWidget {
                           StatusChip(task.status),
                           if (task.dueDate != null)
                             DueDateLabel(task, today: DateTime.now()),
+                          if (task.checklist.isNotEmpty)
+                            ChecklistProgress(task),
                           if (members?[task.assigneeId] case final name?)
                             _Assignee(name),
                           if (projectName case final name?) _ProjectName(name),

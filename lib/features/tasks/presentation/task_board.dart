@@ -10,6 +10,7 @@ import '../../../core/widgets/status_chip.dart';
 import '../../../core/widgets/undo_delete.dart';
 import '../data/task_repository.dart';
 import '../domain/task.dart';
+import 'checklist_progress.dart';
 import 'due_date_label.dart';
 import 'task_card.dart';
 import 'task_form.dart';
@@ -335,6 +336,7 @@ class BoardCard extends ConsumerWidget {
                     PriorityChip(task.priority),
                     if (task.dueDate != null)
                       DueDateLabel(task, today: DateTime.now()),
+                    if (task.checklist.isNotEmpty) ChecklistProgress(task),
                     if (assignee != null)
                       Semantics(
                         label: 'Assigned to $assignee',

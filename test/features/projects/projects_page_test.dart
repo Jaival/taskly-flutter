@@ -108,6 +108,74 @@ void main() {
     );
   });
 
+  group('task progress on a card', () {
+    Future<void> seedTasks(String projectId, List<String> statuses) async {
+      for (final (index, status) in statuses.indexed) {
+        await firestore.collection('projects/$projectId/tasks').add({
+          'title': 'Task $index',
+          'status': status,
+          'order': index,
+        });
+      }
+    }
+
+    testWidgets('shows how many tasks are done', (tester) async {
+      await seedProject('a', name: 'Alpha', day: 2);
+      await seedProject('b', name: 'Beta');
+      await seedTasks('a', ['complete', 'inProgress', 'notStarted']);
+      await pumpProjects(tester);
+
+      final alpha = find.widgetWithText(ProjectCard, 'Alpha');
+      expect(
+        find.descendant(of: alpha, matching: find.text('1/3')),
+        findsOneWidget,
+      );
+      // The card reads as one thing, the progress included.
+      expect(
+        find.bySemanticsLabel(RegExp('Alpha.*1 of 3 tasks done', dotAll: true)),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<LinearProgressIndicator>(
+              find.descendant(
+                of: alpha,
+                matching: find.byType(LinearProgressIndicator),
+              ),
+            )
+            .value,
+        closeTo(1 / 3, 0.001),
+      );
+
+      // Nothing to show for a project without tasks.
+      expect(
+        find.descendant(
+          of: find.widgetWithText(ProjectCard, 'Beta'),
+          matching: find.byType(LinearProgressIndicator),
+        ),
+        findsNothing,
+      );
+    });
+
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('fits a full card with text at ${scale}x', (tester) async {
+        tester.platformDispatcher.textScaleFactorTestValue = scale;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        await seedProject('a', name: 'A long project name ' * 4);
+        await firestore.doc('projects/a').update({
+          'description': 'A description that runs over two lines. ' * 4,
+        });
+        await seedTasks('a', ['complete', 'notStarted']);
+
+        // Two columns, so the card is at its narrowest.
+        await pumpProjects(tester, size: const Size(600, 900));
+
+        expect(find.text('1/2'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      });
+    }
+  });
+
   testWidgets('editing a project from its menu', (tester) async {
     await seedProject('p1');
     await pumpProjects(tester);
