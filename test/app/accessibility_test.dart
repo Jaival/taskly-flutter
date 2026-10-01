@@ -108,6 +108,30 @@ void main() {
     }
   }
 
+  for (final brightness in Brightness.values) {
+    testWidgets('a project as a board meets the guidelines '
+        '(${brightness.name})', (tester) async {
+      final semantics = tester.ensureSemantics();
+      tester.platformDispatcher.platformBrightnessTestValue = brightness;
+      addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
+      await seed();
+      await pumpApp(
+        tester,
+        user: testUser,
+        firestore: firestore,
+        location: '/projects/p1',
+        size: const Size(1400, 1000),
+      );
+      await tester.tap(find.byTooltip('Show as a board'));
+      await tester.pumpAndSettle();
+
+      await expectLater(tester, meetsGuideline(textContrastGuideline));
+      await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
+      await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+      semantics.dispose();
+    });
+  }
+
   for (final MapEntry(key: name, value: location) in pages.entries) {
     testWidgets('$name page fits with text at 200%', (tester) async {
       tester.platformDispatcher.textScaleFactorTestValue = 2;
