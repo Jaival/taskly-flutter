@@ -33,17 +33,21 @@ void main() {
   });
 
   test('groups in order, soonest first, keeping list order for ties', () {
-    final groups = groupByDue([
-      task('no date 1'),
-      task('next week', due: DateTime(2026, 10, 8)),
-      task('done', due: DateTime(2026, 9, 1), done: true),
-      task('tomorrow b', due: DateTime(2026, 10, 2)),
-      task('last week', due: DateTime(2026, 9, 24)),
-      task('today', due: DateTime(2026, 10, 1)),
-      task('tomorrow a', due: DateTime(2026, 10, 2)),
-      task('yesterday', due: DateTime(2026, 9, 30)),
-      task('no date 2'),
-    ], today);
+    final groups = groupByDue(
+      [
+        task('no date 1'),
+        task('next week', due: DateTime(2026, 10, 8)),
+        task('done', due: DateTime(2026, 9, 1), done: true),
+        task('tomorrow b', due: DateTime(2026, 10, 2)),
+        task('last week', due: DateTime(2026, 9, 24)),
+        task('today', due: DateTime(2026, 10, 1)),
+        task('tomorrow a', due: DateTime(2026, 10, 2)),
+        task('yesterday', due: DateTime(2026, 9, 30)),
+        task('no date 2'),
+      ],
+      today,
+      (task) => task,
+    );
 
     List<String> titles(DueGroup group) => [
       for (final task in groups[group]!) task.title,
@@ -61,17 +65,23 @@ void main() {
   });
 
   test('leaves out empty groups', () {
-    expect(groupByDue([task('a')], today).keys, [DueGroup.noDate]);
-    expect(groupByDue([], today), isEmpty);
+    expect(groupByDue([task('a')], today, (task) => task).keys, [
+      DueGroup.noDate,
+    ]);
+    expect(groupByDue(<Task>[], today, (task) => task), isEmpty);
   });
 
   test('open tasks by due: dated soonest first, then undated', () {
-    final open = openTasksByDue([
-      task('undated'),
-      task('done', done: true),
-      task('friday', due: DateTime(2026, 10, 2)),
-      task('late', due: DateTime(2026, 9, 1)),
-    ], today);
+    final open = openTasksByDue(
+      [
+        task('undated'),
+        task('done', done: true),
+        task('friday', due: DateTime(2026, 10, 2)),
+        task('late', due: DateTime(2026, 9, 1)),
+      ],
+      today,
+      (task) => task,
+    );
     expect([for (final t in open) t.title], ['late', 'friday', 'undated']);
   });
 }

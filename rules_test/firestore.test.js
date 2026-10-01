@@ -19,6 +19,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  orderBy,
   query,
   serverTimestamp,
   setDoc,
@@ -344,6 +345,16 @@ describe('project tasks', () => {
   test('members can read tasks, others cannot', async () => {
     await assertSucceeds(getDocs(collection(as('carol'), 'projects/p1/tasks')));
     await assertFails(getDocs(collection(as('dave'), 'projects/p1/tasks')));
+  });
+
+  test("the Tasks page's query: a member's assigned tasks, in order", async () => {
+    const assigned = (db, uid) => query(
+      collection(db, 'projects/p1/tasks'),
+      where('assigneeId', '==', uid),
+      orderBy('order'),
+    );
+    await assertSucceeds(getDocs(assigned(as('carol'), 'carol')));
+    await assertFails(getDocs(assigned(as('dave'), 'dave')));
   });
 
   test('editors can create tasks, viewers cannot', async () => {

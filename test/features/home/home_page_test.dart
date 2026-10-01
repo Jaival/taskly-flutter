@@ -6,7 +6,7 @@ import 'package:taskly/app/router.dart';
 import 'package:taskly/features/home/presentation/home_page.dart';
 import 'package:taskly/features/projects/presentation/project_detail_page.dart';
 import 'package:taskly/features/tasks/presentation/task_card.dart';
-import 'package:taskly/features/tasks/presentation/tasks_page.dart';
+import 'package:taskly/features/my_tasks/presentation/tasks_page.dart';
 
 import '../../helpers/due_dates.dart';
 import '../../helpers/pump_app.dart';
@@ -205,13 +205,18 @@ void main() {
     expect(find.byType(ProjectDetailPage), findsOneWidget);
   });
 
-  testWidgets('a stat card opens its list', (tester) async {
+  testWidgets('a stat card opens its list, filtered to it', (tester) async {
     await seedTask('a', title: 'A');
+    await seedTask('b', title: 'B', status: 'complete');
     await pumpHome(tester);
 
-    await tester.tap(statCard('To do', 1));
+    await tester.tap(statCard('Done', 1));
     await tester.pumpAndSettle();
+
     expect(find.byType(TasksPage), findsOneWidget);
+    expect(find.text('Showing 1 of 2 tasks'), findsOneWidget);
+    expect(find.widgetWithText(TaskCard, 'B'), findsOneWidget);
+    expect(find.widgetWithText(TaskCard, 'A'), findsNothing);
   });
 
   for (final size in [const Size(360, 640), const Size(1400, 900)]) {

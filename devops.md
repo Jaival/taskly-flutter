@@ -167,6 +167,7 @@ taskly-flutter/
 │       │   ├── domain/       ← Project, Task, Invite, UserProfile
 │       │   ├── data/         ← *_firestore.dart: typed collections + converters
 │       │   └── presentation/ ← pages and widgets
+│       ├── my_tasks/         ← the Tasks page: your tasks from everywhere, filtered
 │       └── home/  landing/
 │           └── presentation/
 ├── test/                     ← mirrors lib/ (test/app ↔ lib/app, etc.)
@@ -231,6 +232,7 @@ presentation  ──►  data  ──►  domain
 - Sign-up (in `auth`) creates the user's profile through `userProfileRepositoryProvider` from `profile/data`. It never touches the `users` collection directly, so the profile feature stays free to change how profiles are stored.
 - The project page shows `ProjectTaskList` from `tasks/presentation`. It takes plain values (`projectId`, `uid`, `canEdit`, `members`), not a `Project`, so `tasks` doesn't depend on `projects`. Dependencies between features should point one way; if two features need each other, something belongs in `core/`.
 - The same goes for sharing: the project page embeds `ProjectInvites` and opens `showInviteForm`, and the Shared page (in `projects`, since it lists projects) embeds `ReceivedInvites`. All take plain values. So the arrows are `projects → sharing, tasks, profile` and `sharing → profile, auth`, never back.
+- The Tasks page lists personal tasks *and* project tasks assigned to you, so it needs both features. It can't live in `tasks` (that would point `tasks → projects`), so it has its own feature, `my_tasks`, which depends on both. Home uses its `myTasksProvider` too. `TaskCard` takes the project's name as a plain `projectName` string for the same reason.
 
 ### Why models and Firestore code are separate files
 
@@ -486,8 +488,8 @@ Three details:
 
 There are two test suites:
 
-- **Dart tests** (`test/`, 211 tests): run with `flutter test`. Takes a few seconds.
-- **Security rules tests** (`rules_test/`, 50 tests): run with `npm test` inside `rules_test/`. This starts the Firestore emulator, runs the tests, and stops it. If the emulators are already running (you'd get "port taken"), use them instead: `FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npm run test:only`. The tests load `firestore.rules` fresh each run. See [section 11](#11-firestore-primer-read-before-phase-2).
+- **Dart tests** (`test/`, 230 tests): run with `flutter test`. Takes a few seconds.
+- **Security rules tests** (`rules_test/`, 51 tests): run with `npm test` inside `rules_test/`. This starts the Firestore emulator, runs the tests, and stops it. If the emulators are already running (you'd get "port taken"), use them instead: `FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npm run test:only`. The tests load `firestore.rules` fresh each run. See [section 11](#11-firestore-primer-read-before-phase-2).
 
 ### The testing pyramid
 
@@ -606,7 +608,7 @@ Things that **are** secret and must never be committed: service account JSON fil
  └──────────────────────────┬──────────────────────────────┘
  ┌──────────────── job: rules (runs in parallel) ──────────┐
  │ Java 21 + Node 24 → npm ci → npm test                   │
- │ (Firestore emulator + 50 security rules tests)          │
+ │ (Firestore emulator + 51 security rules tests)          │
  └──────────────────────────┬──────────────────────────────┘
                             │ only if BOTH passed AND branch is main
                             ▼
@@ -739,6 +741,10 @@ A **due date** is different: it's a calendar day, not a moment. A `Timestamp` is
 ### Indexes
 
 Single-field queries work automatically. A query that filters on one field and sorts by another needs a **composite index**. The first time you run one, Firestore throws an error containing a link that creates the index. We'll also record them in `firestore.indexes.json` so they're deployed from the repo.
+
+**The emulator doesn't check indexes.** A query that needs a missing index works locally and fails in production. So whenever a query adds a `where` on one field and an `orderBy` on another, add the index to `firestore.indexes.json` in the same commit. For example, "tasks assigned to me in this project, in list order" (`assigneeId ==`, `orderBy('order')`) has its own entry.
+
+**Why not one query for all my assigned tasks?** A *collection-group* query (`collectionGroup('tasks').where('assigneeId', '==', uid)`) reads every `tasks` collection at once. But the rules can only allow a query when every possible result passes, and "is a member of the project in this document's path" can't be checked that way. Someone who left a project and still has tasks assigned there would see them. So the Tasks page asks each of your projects separately: a few more listeners, and rules that stay simple.
 
 ### Cost
 

@@ -21,11 +21,12 @@ void main() {
     String? assigneeId,
     double order = 1,
     int? dueInDays,
+    String priority = 'medium',
   }) => firestore.doc(path).set({
     'ownerId': ownerId ?? testUser.uid,
     'title': title,
     'description': '',
-    'priority': 'medium',
+    'priority': priority,
     'status': status,
     'assigneeId': assigneeId,
     'dueDate': dueInDays == null ? null : dueTimestamp(dueInDays),
@@ -34,11 +35,29 @@ void main() {
     'updatedAt': Timestamp.now(),
   });
 
+  Future<void> seedProject(String id, {required String role}) =>
+      firestore.doc('projects/$id').set({
+        'ownerId': 'bob',
+        'name': 'Launch',
+        'description': '',
+        'priority': 'high',
+        'status': 'notStarted',
+        'memberIds': ['bob', testUser.uid],
+        'roles': {'bob': 'owner', testUser.uid: role},
+        'createdAt': Timestamp.now(),
+        'updatedAt': Timestamp.now(),
+      });
+
   Future<void> pumpTasks(
     WidgetTester tester, {
     String location = Routes.tasks,
   }) =>
       pumpApp(tester, user: testUser, firestore: firestore, location: location);
+
+  // The list of tasks, not the row of filter chips, which scrolls too.
+  final taskList = find
+      .descendant(of: find.byType(ListView), matching: find.byType(Scrollable))
+      .first;
 
   Finder cardFor(String title) =>
       find.ancestor(of: find.text(title), matching: find.byType(TaskCard));
@@ -357,7 +376,11 @@ void main() {
         'Finished',
       ];
       for (var i = 1; i < order.length; i++) {
-        await tester.scrollUntilVisible(find.text(order[i]), 100);
+        await tester.scrollUntilVisible(
+          find.text(order[i]),
+          100,
+          scrollable: taskList,
+        );
         expect(top(order[i - 1]), lessThan(top(order[i])), reason: order[i]);
       }
       expect(
@@ -371,6 +394,179 @@ void main() {
       await pumpTasks(tester);
 
       expect(find.textContaining('No due date'), findsNothing);
+    });
+  });
+
+  /// Opens [menu], ticks [option], and closes the menu again (it stays
+  /// open for ticking more).
+  Future<void> tick(WidgetTester tester, String menu, String option) async {
+    // The chips scroll sideways on a phone.
+    await tester.ensureVisible(find.byTooltip(menu));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip(menu));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(CheckboxMenuButton, option));
+    await tester.pumpAndSettle();
+    // Tap outside it: the app bar, which does nothing itself.
+    await tester.tapAt(const Offset(200, 20));
+    await tester.pumpAndSettle();
+  }
+
+  List<String> shownTitles(WidgetTester tester) => [
+    for (final card in tester.widgetList<TaskCard>(find.byType(TaskCard)))
+      card.task.title,
+  ];
+
+  group('search, filter and sort', () {
+    Future<void> seedThree() async {
+      await seedTask('tasks/a', title: 'Buy milk', priority: 'low', order: 1);
+      await seedTask('tasks/b', title: 'Pay rent', priority: 'high', order: 2);
+      await seedTask(
+        'tasks/c',
+        title: 'Call mum',
+        priority: 'immediate',
+        status: 'complete',
+        order: 3,
+      );
+    }
+
+    final search = find.widgetWithText(TextField, 'Search tasks');
+
+    testWidgets('searching narrows the list', (tester) async {
+      await seedThree();
+      await pumpTasks(tester);
+
+      await tester.enterText(search, 'MILK');
+      await tester.pumpAndSettle();
+
+      expect(shownTitles(tester), ['Buy milk']);
+      await tester.tap(find.byTooltip('Clear search'));
+      await tester.pumpAndSettle();
+      expect(shownTitles(tester), hasLength(3));
+    });
+
+    testWidgets('filtering by priority, then clearing', (tester) async {
+      await seedThree();
+      await pumpTasks(tester);
+
+      await tick(tester, 'Filter by priority', 'High');
+      await tick(tester, 'Filter by priority', 'Immediate');
+
+      expect(shownTitles(tester), ['Pay rent', 'Call mum']);
+      expect(find.text('Priority · 2'), findsOneWidget);
+      expect(find.text('Showing 2 of 3 tasks'), findsOneWidget);
+
+      await tester.tap(find.text('Clear filters'));
+      await tester.pumpAndSettle();
+      expect(shownTitles(tester), hasLength(3));
+      expect(find.text('Priority'), findsOneWidget);
+    });
+
+    testWidgets('nothing matching says so, and offers to clear', (
+      tester,
+    ) async {
+      await seedThree();
+      await pumpTasks(tester);
+
+      await tester.enterText(search, 'zebra');
+      await tester.pumpAndSettle();
+      expect(find.text('No matching tasks'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Clear filters'));
+      await tester.pumpAndSettle();
+      expect(shownTitles(tester), hasLength(3));
+      // The search box empties too.
+      expect(find.text('zebra'), findsNothing);
+    });
+
+    testWidgets('sorting by priority lists them without groups', (
+      tester,
+    ) async {
+      await seedThree();
+      await seedTask('tasks/d', title: 'Soon', dueInDays: 1, order: 4);
+      await pumpTasks(tester);
+      expect(find.text('Upcoming · 1'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Sort'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(MenuItemButton, 'Priority'));
+      await tester.pumpAndSettle();
+
+      expect(shownTitles(tester), ['Call mum', 'Pay rent', 'Soon', 'Buy milk']);
+      expect(find.text('Upcoming · 1'), findsNothing);
+      expect(find.text('Sort: Priority'), findsOneWidget);
+    });
+
+    testWidgets('filters are kept when you come back to the page', (
+      tester,
+    ) async {
+      await seedThree();
+      await pumpTasks(tester);
+      await tick(tester, 'Filter by status', 'Complete');
+
+      await tester.tap(find.text('Home').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Tasks').last);
+      await tester.pumpAndSettle();
+
+      expect(shownTitles(tester), ['Call mum']);
+    });
+  });
+
+  group('project tasks assigned to you', () {
+    testWidgets('are listed with their project, and filtered by it', (
+      tester,
+    ) async {
+      await seedProject('p1', role: 'editor');
+      await seedTask('tasks/a', title: 'Buy milk');
+      await seedTask(
+        'projects/p1/tasks/t1',
+        title: 'Write copy',
+        ownerId: 'bob',
+        assigneeId: testUser.uid,
+      );
+      await seedTask(
+        'projects/p1/tasks/t2',
+        title: 'For Bob',
+        ownerId: 'bob',
+        assigneeId: 'bob',
+      );
+      await pumpTasks(tester);
+
+      expect(shownTitles(tester), ['Buy milk', 'Write copy']);
+      expect(
+        find.descendant(
+          of: cardFor('Write copy'),
+          matching: find.text('Launch'),
+        ),
+        findsOneWidget,
+      );
+
+      await tick(tester, 'Filter by project', 'Personal');
+      expect(shownTitles(tester), ['Buy milk']);
+    });
+
+    testWidgets('a viewer can tick theirs off but not edit it', (tester) async {
+      await seedProject('p1', role: 'viewer');
+      await seedTask(
+        'projects/p1/tasks/t1',
+        title: 'Proofread',
+        ownerId: 'bob',
+        assigneeId: testUser.uid,
+      );
+      await pumpTasks(tester);
+
+      expect(find.byTooltip('Delete "Proofread"'), findsNothing);
+      await tester.tap(find.text('Proofread'));
+      await tester.pumpAndSettle();
+      expect(find.text('Edit task'), findsNothing);
+
+      await tester.tap(checkboxFor('Proofread'));
+      await tester.pumpAndSettle();
+      expect(
+        (await firestore.doc('projects/p1/tasks/t1').get()).get('status'),
+        'complete',
+      );
     });
   });
 }

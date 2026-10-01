@@ -11,12 +11,14 @@ import '../../../core/widgets/skeleton.dart';
 import '../../../core/widgets/status_chip.dart';
 import '../../../core/widgets/undo_delete.dart';
 import '../../auth/data/auth_repository.dart';
+import '../../my_tasks/data/my_tasks_provider.dart';
+import '../../my_tasks/domain/my_task.dart';
+import '../../my_tasks/domain/task_filter.dart';
+import '../../my_tasks/presentation/my_task_card.dart';
 import '../../projects/data/project_repository.dart';
 import '../../projects/domain/project.dart';
 import '../../projects/presentation/project_form.dart';
-import '../../tasks/data/task_repository.dart';
 import '../../tasks/domain/due_date.dart';
-import '../../tasks/domain/task.dart';
 import '../../tasks/presentation/task_card.dart';
 import '../../tasks/presentation/task_form.dart';
 
@@ -24,7 +26,7 @@ import '../../tasks/presentation/task_form.dart';
 const _upNextCount = 5;
 const _recentProjectCount = 4;
 
-/// `/home`: counts, the next few personal tasks and recently changed
+/// `/home`: counts, the next few of the user's tasks and recently changed
 /// projects.
 class HomePage extends ConsumerWidget {
   const HomePage({super.key});
@@ -40,11 +42,11 @@ class HomePage extends ConsumerWidget {
     final user = ref.watch(authStateProvider).value;
     final hidden = ref.watch(pendingDeletionsProvider);
     final tasks = ref
-        .watch(personalTasksProvider)
+        .watch(myTasksProvider)
         .whenData(
-          (tasks) => [
-            for (final task in tasks)
-              if (!hidden.contains(taskDeletionKey(task))) task,
+          (items) => [
+            for (final item in items)
+              if (!hidden.contains(taskDeletionKey(item.task))) item,
           ],
         );
     final projects = ref.watch(projectsProvider);
@@ -80,7 +82,7 @@ class HomePage extends ConsumerWidget {
       }
     }
 
-    final upNext = _UpNext(tasks: tasks);
+    final upNext = _UpNext(tasks: tasks, uid: user?.uid ?? '');
     final recent = _RecentProjects(projects: projects);
 
     return LayoutBuilder(
@@ -123,35 +125,38 @@ class HomePage extends ConsumerWidget {
   }
 }
 
-/// Counts of projects and personal tasks by status. Each opens its list.
-class _Stats extends StatelessWidget {
+/// Counts of projects and the user's tasks by status. Each opens its list,
+/// filtered to that status.
+class _Stats extends ConsumerWidget {
   const _Stats({required this.tasks, required this.projects});
 
-  final AsyncValue<List<Task>> tasks;
+  final AsyncValue<List<MyTask>> tasks;
   final AsyncValue<List<Project>> projects;
 
-  int? _count(TaskStatus status) =>
-      tasks.value?.where((task) => task.status == status).length;
-
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    int? count(TaskStatus status) =>
+        tasks.value?.where((item) => item.task.status == status).length;
+    // The Tasks page, showing only [status].
+    void openTasks(TaskStatus status) {
+      ref
+          .read(taskFilterProvider.notifier)
+          .change(TaskFilter(statuses: {status}));
+      context.go(Routes.tasks);
+    }
+
     final stats = [
       (
         label: 'Projects',
         count: projects.value?.length,
-        route: Routes.projects,
+        onTap: () => context.go(Routes.projects),
       ),
-      (
-        label: 'To do',
-        count: _count(TaskStatus.notStarted),
-        route: Routes.tasks,
-      ),
-      (
-        label: 'In progress',
-        count: _count(TaskStatus.inProgress),
-        route: Routes.tasks,
-      ),
-      (label: 'Done', count: _count(TaskStatus.complete), route: Routes.tasks),
+      for (final (label, status) in [
+        ('To do', TaskStatus.notStarted),
+        ('In progress', TaskStatus.inProgress),
+        ('Done', TaskStatus.complete),
+      ])
+        (label: label, count: count(status), onTap: () => openTasks(status)),
     ];
 
     return LayoutBuilder(
@@ -172,7 +177,7 @@ class _Stats extends StatelessWidget {
                         child: _StatCard(
                           label: stat.label,
                           count: stat.count,
-                          onTap: () => context.go(stat.route),
+                          onTap: stat.onTap,
                         ),
                       ),
                     ],
@@ -243,12 +248,12 @@ class _SectionHeader extends StatelessWidget {
   const _SectionHeader({
     required this.title,
     required this.linkLabel,
-    required this.route,
+    required this.onPressed,
   });
 
   final String title;
   final String linkLabel;
-  final String route;
+  final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
@@ -257,33 +262,40 @@ class _SectionHeader extends StatelessWidget {
         Expanded(
           child: Text(title, style: Theme.of(context).textTheme.titleMedium),
         ),
-        TextButton(onPressed: () => context.go(route), child: Text(linkLabel)),
+        TextButton(onPressed: onPressed, child: Text(linkLabel)),
       ],
     );
   }
 }
 
-/// The first few open personal tasks: the most urgent by due date, then the
-/// undated ones in list order.
-class _UpNext extends StatelessWidget {
-  const _UpNext({required this.tasks});
+/// The first few of the user's open tasks: the most urgent by due date,
+/// then the undated ones in list order.
+class _UpNext extends ConsumerWidget {
+  const _UpNext({required this.tasks, required this.uid});
 
-  final AsyncValue<List<Task>> tasks;
+  final AsyncValue<List<MyTask>> tasks;
+  final String uid;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const _SectionHeader(
+        _SectionHeader(
           title: 'Up next',
           linkLabel: 'All tasks',
-          route: Routes.tasks,
+          // All of them: whatever was filtered last time is cleared.
+          onPressed: () {
+            final filter = ref.read(taskFilterProvider);
+            ref.read(taskFilterProvider.notifier).change(filter.cleared());
+            context.go(Routes.tasks);
+          },
         ),
         ...switch (tasks) {
           AsyncData(:final value) => switch (openTasksByDue(
             value,
             DateTime.now(),
+            (item) => item.task,
           )) {
             [] => [
               _Placeholder(
@@ -291,11 +303,11 @@ class _UpNext extends StatelessWidget {
               ),
             ],
             final open => [
-              for (final task in open.take(_upNextCount))
+              for (final item in open.take(_upNextCount))
                 Padding(
-                  key: ValueKey(task.id),
+                  key: ValueKey(taskDeletionKey(item.task)),
                   padding: const EdgeInsets.only(bottom: AppSpacing.xs),
-                  child: TaskCard(task: task),
+                  child: MyTaskCard(item, uid: uid),
                 ),
             ],
           },
@@ -318,10 +330,10 @@ class _RecentProjects extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const _SectionHeader(
+        _SectionHeader(
           title: 'Recent projects',
           linkLabel: 'All projects',
-          route: Routes.projects,
+          onPressed: () => context.go(Routes.projects),
         ),
         ...switch (projects) {
           AsyncData(value: []) => [const _Placeholder('No projects yet.')],

@@ -4,7 +4,7 @@ import 'package:taskly/app/router.dart';
 import 'package:taskly/features/home/presentation/home_page.dart';
 import 'package:taskly/features/profile/presentation/profile_page.dart';
 import 'package:taskly/features/projects/presentation/projects_page.dart';
-import 'package:taskly/features/tasks/presentation/tasks_page.dart';
+import 'package:taskly/features/my_tasks/presentation/tasks_page.dart';
 
 import '../helpers/pump_app.dart';
 

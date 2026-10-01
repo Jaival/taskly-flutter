@@ -227,7 +227,11 @@ Tier A is what makes this feel like a real product. The rest is optional.
   - Cards say "Today", "Tomorrow", "In 3 days", "2 days ago" or the date, in red with a different icon when overdue. Done tasks are never overdue.
   - The Tasks page groups personal tasks into Overdue, Today, Upcoming (soonest first), No due date and Done. Without any due dates it stays a plain list. Home's "Up next" is the most urgent first.
   - Project pages show the labels but keep their list order; the board view below groups them by status instead.
-- [ ] **Search, filter and sort** by priority, status, project and due date.
+- [x] **Search, filter and sort** by priority, status, project and due date.
+  - The Tasks page now lists project tasks assigned to you beside your personal tasks (the "Assigned to me" view left over from 3.6), each labelled with its project. Viewers can tick theirs off there but not edit them. One query per project, not a collection-group query, so the rules stay simple (devops.md 11, with a new index to deploy).
+  - A search box (title and description), and menus to filter by priority, status, due (overdue, today, upcoming, none) and project (or personal). "Showing 2 of 8 tasks · Clear filters" appears while anything is filtered.
+  - Sort by due date (grouped, as before), priority, newest or title. The choice survives switching tabs, and resets on sign-out.
+  - Home's counts and "Up next" include assigned tasks too, and each count opens the Tasks page filtered to that status.
 - [ ] **Kanban board view** per project (Not Started / In Progress / Complete) with drag and drop, alongside the list view.
 - [ ] **Subtasks / checklists** inside a task, with a progress bar on project cards.
 - [ ] **Dashboard stats:** overdue count, done this week, and a small completion chart.

@@ -1,4 +1,4 @@
-import 'package:collection/collection.dart';
+import 'package:flutter/foundation.dart';
 
 import 'task.dart';
 
@@ -43,19 +43,26 @@ extension TaskDueDate on Task {
   };
 }
 
-/// [tasks] split into their [DueGroup]s, in the enum's order, leaving out
-/// empty groups. Dated tasks are soonest first; ties, undated and done
-/// tasks keep the order they came in (the list order).
-Map<DueGroup, List<Task>> groupByDue(Iterable<Task> tasks, DateTime today) {
-  final groups = {for (final group in DueGroup.values) group: <Task>[]};
-  for (final task in tasks) {
-    groups[task.dueGroup(today)]!.add(task);
+/// [items] split into their tasks' [DueGroup]s, in the enum's order,
+/// leaving out empty groups. [taskOf] gets the task from an item; pass
+/// `(task) => task` for a plain list of tasks.
+///
+/// Dated tasks are soonest first; ties, undated and done tasks keep the
+/// order they came in (the list order).
+Map<DueGroup, List<T>> groupByDue<T>(
+  Iterable<T> items,
+  DateTime today,
+  Task Function(T) taskOf,
+) {
+  final groups = {for (final group in DueGroup.values) group: <T>[]};
+  for (final item in items) {
+    groups[taskOf(item).dueGroup(today)]!.add(item);
   }
   for (final group in [DueGroup.overdue, DueGroup.upcoming]) {
     // Stable, unlike List.sort, so ties stay in list order.
     mergeSort(
       groups[group]!,
-      compare: (a, b) => a.dueDate!.compareTo(b.dueDate!),
+      compare: (a, b) => taskOf(a).dueDate!.compareTo(taskOf(b).dueDate!),
     );
   }
   return {
@@ -66,7 +73,11 @@ Map<DueGroup, List<Task>> groupByDue(Iterable<Task> tasks, DateTime today) {
 
 /// Open tasks in the order to do them: overdue, today and upcoming by date,
 /// then the undated ones in list order.
-List<Task> openTasksByDue(Iterable<Task> tasks, DateTime today) => [
-  for (final MapEntry(:key, :value) in groupByDue(tasks, today).entries)
+List<T> openTasksByDue<T>(
+  Iterable<T> items,
+  DateTime today,
+  Task Function(T) taskOf,
+) => [
+  for (final MapEntry(:key, :value) in groupByDue(items, today, taskOf).entries)
     if (key != DueGroup.done) ...value,
 ];

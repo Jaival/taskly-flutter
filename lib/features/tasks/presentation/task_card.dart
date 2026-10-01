@@ -26,6 +26,7 @@ class TaskCard extends ConsumerWidget {
     super.key,
     required this.task,
     this.members,
+    this.projectName,
     this.canEdit = true,
     this.canChangeStatus = true,
   });
@@ -35,6 +36,10 @@ class TaskCard extends ConsumerWidget {
   /// The project's members, as user ID → name, to show the assignee and
   /// offer them in the edit form. Null for personal tasks.
   final Map<String, String>? members;
+
+  /// Shown on the card when it's listed away from its project (the Tasks
+  /// page). Null on the project's own page, and for personal tasks.
+  final String? projectName;
 
   /// Whether the user may edit and delete it. Project viewers can't.
   final bool canEdit;
@@ -154,6 +159,7 @@ class TaskCard extends ConsumerWidget {
                             DueDateLabel(task, today: DateTime.now()),
                           if (members?[task.assigneeId] case final name?)
                             _Assignee(name),
+                          if (projectName case final name?) _ProjectName(name),
                         ],
                       ),
                     ],
@@ -171,6 +177,36 @@ class TaskCard extends ConsumerWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ProjectName extends StatelessWidget {
+  const _ProjectName(this.name);
+
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = theme.colorScheme.onSurfaceVariant;
+    return Semantics(
+      label: 'In $name',
+      excludeSemantics: true,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.folder_outlined, size: 16, color: color),
+          const SizedBox(width: AppSpacing.xs),
+          Flexible(
+            child: Text(
+              name,
+              style: theme.textTheme.labelMedium?.copyWith(color: color),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
       ),
     );
   }

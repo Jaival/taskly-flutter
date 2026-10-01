@@ -33,6 +33,13 @@ class TaskRepository {
   Stream<List<Task>> watchProjectTasks(String projectId) =>
       _watch(_collection(projectId));
 
+  /// The tasks in one project assigned to [uid], in list order. One query
+  /// per project, rather than a collection-group query across all of them:
+  /// the rules can only allow a query they can check, and "member of the
+  /// project in this path" can't be checked across paths.
+  Stream<List<Task>> watchAssignedTasks(String projectId, String uid) =>
+      _watch(_collection(projectId).where('assigneeId', isEqualTo: uid));
+
   Stream<List<Task>> _watch(Query<Task> query) => query
       .orderBy('order')
       .snapshots()
@@ -118,4 +125,20 @@ final projectTasksProvider = StreamProvider.autoDispose
     .family<List<Task>, String>((ref, projectId) {
       ref.watch(authStateProvider.select((user) => user.value?.uid));
       return ref.watch(taskRepositoryProvider).watchProjectTasks(projectId);
+    });
+
+/// The signed-in user's tasks in one project. For the Tasks page, which
+/// shows these beside personal tasks.
+///
+/// `autoDispose` and restarted when the user changes, like
+/// [projectTasksProvider].
+final assignedTasksProvider = StreamProvider.autoDispose
+    .family<List<Task>, String>((ref, projectId) {
+      final uid = ref.watch(
+        authStateProvider.select((user) => user.value?.uid),
+      );
+      if (uid == null) return Stream.value(const []);
+      return ref
+          .watch(taskRepositoryProvider)
+          .watchAssignedTasks(projectId, uid);
     });

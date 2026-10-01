@@ -38,6 +38,10 @@ Future<FakeAuthRepository> pumpApp(
   Size size = const Size(400, 800),
 }) async {
   setWindowSize(tester, size);
+  // A test that pumps the app twice: take the first one down, and let its
+  // providers finish disposing (Riverpod schedules that), before the next.
+  await tester.pumpWidget(const SizedBox.shrink());
+  await tester.pump();
   final fakeAuth = auth ?? FakeAuthRepository(currentUser: user);
   final container = ProviderContainer(
     overrides: [
