@@ -4,7 +4,11 @@ import 'package:go_router/go_router.dart';
 
 import '../features/auth/data/auth_repository.dart';
 import '../features/auth/presentation/verify_email_banner.dart';
+import '../features/my_tasks/data/my_tasks_provider.dart';
+import '../features/projects/presentation/new_project_task.dart';
 import '../features/sharing/data/invite_repository.dart';
+import '../features/tasks/presentation/task_form.dart';
+import 'app_shortcuts.dart';
 import 'router.dart';
 import 'theme/app_spacing.dart';
 
@@ -21,23 +25,31 @@ const List<_Destination> _destinations = [
   (icon: Icons.group_outlined, selectedIcon: Icons.group, label: 'Shared'),
 ];
 
+/// Index of "Tasks" in [_destinations], where the search box is.
+const _tasksIndex = 2;
+
 /// Index of "Shared" in [_destinations], which shows how many invites are
 /// waiting.
 const _sharedIndex = 3;
 
 /// Signed-in layout. The navigation adapts to the window width:
 /// bottom bar on phones, rail on tablets, permanent drawer on desktop.
+/// The keyboard shortcuts work on every page inside it.
 class AppShell extends ConsumerWidget {
   const AppShell({
     super.key,
     required this.navigationShell,
     this.showAppBar = true,
+    this.projectId,
   });
 
   final StatefulNavigationShell navigationShell;
 
   /// False on nested pages, which show their own app bar.
   final bool showAppBar;
+
+  /// The project whose page is showing, if one is: where "N" adds its task.
+  final String? projectId;
 
   void _onSelect(int index) => navigationShell.goBranch(
     index,
@@ -47,6 +59,21 @@ class AppShell extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    return AppShortcuts(
+      // In the project that's open, or a personal task anywhere else.
+      onNewTask: () => switch (projectId) {
+        final id? => showNewProjectTaskForm(context, ref, id),
+        null => showTaskForm(context),
+      },
+      onSearch: () {
+        ref.read(taskSearchRequestProvider.notifier).request();
+        navigationShell.goBranch(_tasksIndex, initialLocation: true);
+      },
+      child: _layout(context, ref),
+    );
+  }
+
+  Widget _layout(BuildContext context, WidgetRef ref) {
     final invites = ref.watch(receivedInvitesProvider).value?.length ?? 0;
     Widget icon(int index, {bool selected = false}) {
       final d = _destinations[index];
@@ -160,6 +187,13 @@ class _AccountMenu extends ConsumerWidget {
           onPressed: () => context.push(Routes.profile),
           child: const Text('Profile'),
         ),
+        // Not on phones, which rarely have a keyboard.
+        if (MediaQuery.sizeOf(context).width >= Breakpoints.medium)
+          MenuItemButton(
+            leadingIcon: const Icon(Icons.keyboard_outlined),
+            onPressed: () => showShortcutsHelp(context),
+            child: const Text('Keyboard shortcuts'),
+          ),
         MenuItemButton(
           leadingIcon: const Icon(Icons.logout),
           onPressed: () => ref.read(authRepositoryProvider).signOut(),

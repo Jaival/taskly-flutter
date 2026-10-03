@@ -57,3 +57,33 @@ class TaskFilterNotifier extends Notifier<TaskFilter> {
 
   void change(TaskFilter filter) => state = filter;
 }
+
+/// A request to put the cursor in the Tasks page's search box: the "/"
+/// shortcut, which can be pressed on any page. Holds when it was asked for.
+final taskSearchRequestProvider =
+    NotifierProvider<TaskSearchRequestNotifier, DateTime?>(
+      TaskSearchRequestNotifier.new,
+    );
+
+class TaskSearchRequestNotifier extends Notifier<DateTime?> {
+  @override
+  DateTime? build() => null;
+
+  void request() => state = DateTime.now();
+
+  /// Whether a request is waiting. It goes stale: if there was no search
+  /// box to answer it (no tasks yet), one that appears later shouldn't grab
+  /// the focus.
+  bool get isWaiting => switch (state) {
+    null => false,
+    final requestedAt =>
+      DateTime.now().difference(requestedAt) < const Duration(seconds: 2),
+  };
+
+  /// Whether the search box should take the focus now. Uses the request up.
+  bool take() {
+    final waiting = isWaiting;
+    state = null;
+    return waiting;
+  }
+}

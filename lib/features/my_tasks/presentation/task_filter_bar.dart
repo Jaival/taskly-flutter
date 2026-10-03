@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_spacing.dart';
@@ -109,7 +110,8 @@ class TaskFilterBar extends ConsumerWidget {
 }
 
 /// The search box. Keeps its text in step with the filter, which "Clear
-/// filters" can empty from outside.
+/// filters" can empty from outside. The "/" shortcut puts the cursor here,
+/// and Esc clears it and leaves.
 class _SearchField extends ConsumerStatefulWidget {
   const _SearchField();
 
@@ -121,10 +123,19 @@ class _SearchFieldState extends ConsumerState<_SearchField> {
   late final _controller = TextEditingController(
     text: ref.read(taskFilterProvider).query,
   );
+  final _focus = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    // "/" on another page, before this one was built.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _answerRequest());
+  }
 
   @override
   void dispose() {
     _controller.dispose();
+    _focus.dispose();
     super.dispose();
   }
 
@@ -133,31 +144,58 @@ class _SearchFieldState extends ConsumerState<_SearchField> {
     notifier.change(ref.read(taskFilterProvider).copyWith(query: query));
   }
 
+  void _answerRequest() {
+    if (!mounted) return;
+    final request = ref.read(taskSearchRequestProvider.notifier);
+    if (!request.isWaiting) return;
+    // Asked for from another tab: this page can't take the focus until it
+    // has come forward, a frame or two from now.
+    if (!_focus.canRequestFocus) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _answerRequest());
+      return;
+    }
+    if (request.take()) _focus.requestFocus();
+  }
+
+  void _clear() {
+    _controller.clear();
+    _search('');
+  }
+
   @override
   Widget build(BuildContext context) {
     ref.listen(taskFilterProvider.select((filter) => filter.query), (_, query) {
       if (query != _controller.text) _controller.text = query;
     });
-    return TextField(
-      controller: _controller,
-      onChanged: _search,
-      textInputAction: TextInputAction.search,
-      decoration: InputDecoration(
-        hintText: 'Search tasks',
-        prefixIcon: const Icon(Icons.search),
-        isDense: true,
-        suffixIcon: ListenableBuilder(
-          listenable: _controller,
-          builder: (context, _) => _controller.text.isEmpty
-              ? const SizedBox.shrink()
-              : IconButton(
-                  tooltip: 'Clear search',
-                  icon: const Icon(Icons.clear),
-                  onPressed: () {
-                    _controller.clear();
-                    _search('');
-                  },
-                ),
+    ref.listen(taskSearchRequestProvider, (_, requestedAt) {
+      if (requestedAt != null) _answerRequest();
+    });
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.escape): () {
+          _clear();
+          _focus.unfocus();
+        },
+      },
+      child: TextField(
+        controller: _controller,
+        focusNode: _focus,
+        onChanged: _search,
+        textInputAction: TextInputAction.search,
+        decoration: InputDecoration(
+          hintText: 'Search tasks',
+          prefixIcon: const Icon(Icons.search),
+          isDense: true,
+          suffixIcon: ListenableBuilder(
+            listenable: _controller,
+            builder: (context, _) => _controller.text.isEmpty
+                ? const SizedBox.shrink()
+                : IconButton(
+                    tooltip: 'Clear search',
+                    icon: const Icon(Icons.clear),
+                    onPressed: _clear,
+                  ),
+          ),
         ),
       ),
     );

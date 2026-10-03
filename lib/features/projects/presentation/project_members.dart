@@ -19,6 +19,18 @@ List<Member> watchMembers(WidgetRef ref, Project project) => [
     _member(uid, project, ref.watch(userProfileProvider(uid))),
 ];
 
+/// [watchMembers] as they are right now, for use outside `build`.
+List<Member> readMembers(WidgetRef ref, Project project) => [
+  for (final uid in project.memberIds)
+    _member(uid, project, ref.read(userProfileProvider(uid))),
+];
+
+/// Who a task can be assigned to, as user ID → name, marking [uid] as you.
+Map<String, String> memberNames(List<Member> members, String uid) => {
+  for (final member in members)
+    member.uid: member.uid == uid ? '${member.name} (you)' : member.name,
+};
+
 Member _member(String uid, Project project, AsyncValue<UserProfile?> profile) {
   final value = profile.value;
   final name = switch ((value?.displayName.trim(), value?.email)) {

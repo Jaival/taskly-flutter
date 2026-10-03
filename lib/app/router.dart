@@ -69,6 +69,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) => AppShell(
           navigationShell: navigationShell,
+          projectId: state.pathParameters['id'],
           // Nested pages like /projects/:id bring their own app bar with a
           // back button.
           showAppBar: state.uri.pathSegments.length <= 1,

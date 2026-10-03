@@ -246,7 +246,11 @@ Tier A is what makes this feel like a real product. The rest is optional.
   - A card on Home, under the counts: how many tasks were done in the last 7 days (today and the six days before, not the calendar week), a bar for each of those days, and "2 overdue", which opens the Tasks page showing only those. With nothing late it says "Nothing overdue".
   - Tasks now record when they were completed (`completedAt`): set when the status becomes Complete, cleared when the task is reopened, and left alone when a done task is edited. The rules allow it only on a complete task (devops.md 11). Tasks completed before this count on the day they were last changed.
   - Like the counts above it, the card covers personal tasks and the project tasks assigned to you. The chart is drawn with plain widgets, so there's no chart package to keep up to date.
-- [ ] **Keyboard shortcuts** on desktop web (`N` for new task, `/` for search, `Esc` to close) via `Shortcuts`/`Actions`.
+- [x] **Keyboard shortcuts** on desktop web (`N` for new task, `/` for search, `Esc` to close) via `Shortcuts`/`Actions`.
+  - `N` opens the new-task form on any signed-in page: a task in the project whose page is open (nothing for a viewer, who can't add tasks), a personal task anywhere else.
+  - `/` opens the Tasks page and puts the cursor in its search box. `Esc` there clears the search and leaves the box. `Esc` already closed forms, dialogs and menus; there's now a test for it.
+  - `?` lists the shortcuts, as does "Keyboard shortcuts" in the account menu (not on phone-width windows).
+  - In a text field the keys are typed as usual, and while a form or dialog is open the shortcuts are off. They work with any keyboard, not only on the web.
 
 ### Tier B: accounts and collaboration
 - [ ] **Google sign-in**, email verification, change password, delete account.

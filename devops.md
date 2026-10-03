@@ -481,6 +481,23 @@ Three details:
 - **`persist: false`.** In current Flutter, a snackbar with an action stays open until it's dismissed, for accessibility. This one must close on its own, because closing is what confirms the delete.
 - **Tests fast-forward time.** `tester.pump(const Duration(seconds: 7))` lets the snackbar time out without the test waiting seven real seconds.
 
+### 5.10 Keyboard shortcuts
+
+`N` adds a task, `/` searches, `?` lists the shortcuts. Flutter splits a shortcut in two ([`app_shortcuts.dart`](lib/app/app_shortcuts.dart)):
+
+- **`Shortcuts`** maps a key to an **intent**, a small object that names what the user wants (`NewTaskIntent`).
+- **`Actions`** maps an intent to the code that does it.
+
+A key press goes to the widget that has the **focus**, then up through its parents until one handles it. Three things follow from that:
+
+- **Typing still works.** Each action is disabled while the focus is in a text field (`_UnlessTyping`). A disabled action doesn't handle the key, so it carries on and "n" is typed. Without this you couldn't type a word with an "n" in it.
+- **They're off in a dialog.** Forms and dialogs open on the root navigator, above the shell, so their keys never pass through the shell's `Shortcuts`. That's what we want: `N` inside a form shouldn't open another one.
+- **The focus has to stay inside the shell.** When the widget that had the focus goes away (you leave a tab), the focus falls back to the nearest `FocusScope` above it. `AppShortcuts` adds one, or it would land on the route *above* the shell and every shortcut would stop working. A test caught this.
+
+`/` and `?` are matched with `CharacterActivator`, by the character typed, because they're on different keys on different keyboard layouts. `N` uses `SingleActivator`, which also checks that Ctrl isn't held, so the browser's Ctrl+N still opens a window.
+
+`/` can be pressed on any page, but the search box belongs to the Tasks page. So the shell switches tab and leaves a request in `taskSearchRequestProvider`; the search box takes the focus once its page is in front. `Esc` needs no code for dialogs and menus (Flutter closes them); the search box adds its own, to clear the search.
+
 
 ---
 
@@ -488,7 +505,7 @@ Three details:
 
 There are two test suites:
 
-- **Dart tests** (`test/`, 258 tests): run with `flutter test`. Takes a few seconds.
+- **Dart tests** (`test/`, 270 tests): run with `flutter test`. Takes a few seconds.
 - **Security rules tests** (`rules_test/`, 53 tests): run with `npm test` inside `rules_test/`. This starts the Firestore emulator, runs the tests, and stops it. If the emulators are already running (you'd get "port taken"), use them instead: `FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npm run test:only`. The tests load `firestore.rules` fresh each run. See [section 11](#11-firestore-primer-read-before-phase-2).
 
 ### The testing pyramid

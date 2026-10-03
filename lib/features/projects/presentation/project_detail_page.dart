@@ -95,10 +95,7 @@ class _ProjectDetails extends ConsumerWidget {
       projectId: project.id,
       uid: uid,
       canEdit: project.canEdit(uid),
-      members: {
-        for (final member in members)
-          member.uid: member.uid == uid ? '${member.name} (you)' : member.name,
-      },
+      members: memberNames(members, uid),
     );
     final people = ProjectMembers(project: project, members: members, uid: uid);
 
