@@ -83,6 +83,10 @@ class TaskFilter {
   /// The same sort, nothing filtered.
   TaskFilter cleared() => TaskFilter(sort: sort);
 
+  /// For the calendar, which shows every due date: the "Due" filter set in
+  /// the list doesn't apply there.
+  TaskFilter withoutDue() => copyWith(due: const {});
+
   bool matches(MyTask item, DateTime today) {
     final task = item.task;
     final words = query.trim().toLowerCase();

@@ -9,7 +9,8 @@ import '../../projects/domain/project.dart';
 import '../data/my_tasks_provider.dart';
 import '../domain/task_filter.dart';
 
-/// Search, filter menus and sort for the Tasks page.
+/// Search, the list/calendar switch, filter menus and sort for the Tasks
+/// page.
 class TaskFilterBar extends ConsumerWidget {
   const TaskFilterBar({
     super.key,
@@ -29,6 +30,8 @@ class TaskFilterBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final filter = ref.watch(taskFilterProvider);
+    // A calendar is by due date already: no sorting, or filtering by it.
+    final calendar = ref.watch(tasksViewProvider) == TasksView.calendar;
     void change(TaskFilter filter) =>
         ref.read(taskFilterProvider.notifier).change(filter);
     final names = {for (final project in projects) project.id: project.name};
@@ -36,7 +39,30 @@ class TaskFilterBar extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const _SearchField(),
+        Row(
+          spacing: AppSpacing.sm,
+          children: [
+            const Expanded(child: _SearchField()),
+            SegmentedButton<TasksView>(
+              segments: const [
+                ButtonSegment(
+                  value: TasksView.list,
+                  icon: Icon(Icons.view_agenda_outlined),
+                  tooltip: 'Show as a list',
+                ),
+                ButtonSegment(
+                  value: TasksView.calendar,
+                  icon: Icon(Icons.calendar_month_outlined),
+                  tooltip: 'Show as a calendar',
+                ),
+              ],
+              selected: {calendar ? TasksView.calendar : TasksView.list},
+              showSelectedIcon: false,
+              onSelectionChanged: (selected) =>
+                  ref.read(tasksViewProvider.notifier).show(selected.single),
+            ),
+          ],
+        ),
         const SizedBox(height: AppSpacing.sm),
         // One scrolling row of chips, so phones don't wrap them onto
         // several lines.
@@ -45,10 +71,11 @@ class TaskFilterBar extends ConsumerWidget {
           child: Row(
             spacing: AppSpacing.sm,
             children: [
-              _SortMenu(
-                sort: filter.sort,
-                onChanged: (sort) => change(filter.copyWith(sort: sort)),
-              ),
+              if (!calendar)
+                _SortMenu(
+                  sort: filter.sort,
+                  onChanged: (sort) => change(filter.copyWith(sort: sort)),
+                ),
               _FilterMenu(
                 label: 'Priority',
                 options: Priority.values,
@@ -65,13 +92,15 @@ class TaskFilterBar extends ConsumerWidget {
                 onChanged: (selected) =>
                     change(filter.copyWith(statuses: selected)),
               ),
-              _FilterMenu(
-                label: 'Due',
-                options: dueFilterGroups,
-                labelOf: (group) => group.label,
-                selected: filter.due,
-                onChanged: (selected) => change(filter.copyWith(due: selected)),
-              ),
+              if (!calendar)
+                _FilterMenu(
+                  label: 'Due',
+                  options: dueFilterGroups,
+                  labelOf: (group) => group.label,
+                  selected: filter.due,
+                  onChanged: (selected) =>
+                      change(filter.copyWith(due: selected)),
+                ),
               if (projects.isNotEmpty)
                 _FilterMenu<String?>(
                   label: 'Project',
@@ -86,7 +115,7 @@ class TaskFilterBar extends ConsumerWidget {
         ),
         // Under the chips rather than at the end of their row, where it
         // could be scrolled out of sight on a phone.
-        if (filter.isFiltering)
+        if ((calendar ? filter.withoutDue() : filter).isFiltering)
           Row(
             children: [
               Expanded(

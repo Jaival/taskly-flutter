@@ -15,11 +15,12 @@ import '../data/my_tasks_provider.dart';
 import '../domain/my_task.dart';
 import '../domain/task_filter.dart';
 import 'my_task_card.dart';
+import 'task_calendar.dart';
 import 'task_filter_bar.dart';
 
 /// `/tasks`: the user's personal tasks and the project tasks assigned to
 /// them, to search, filter and sort. Grouped by when they're due unless
-/// sorted otherwise.
+/// sorted otherwise, or laid out on a calendar.
 class TasksPage extends ConsumerWidget {
   const TasksPage({super.key});
 
@@ -30,7 +31,14 @@ class TasksPage extends ConsumerWidget {
 
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => showTaskForm(context),
+        // From the calendar, a new task is due on the day that's chosen.
+        onPressed: () => showTaskForm(
+          context,
+          dueDate: switch (ref.read(tasksViewProvider)) {
+            TasksView.calendar => ref.read(calendarDayProvider),
+            TasksView.list => null,
+          },
+        ),
         icon: const Icon(Icons.add),
         label: const Text('New task'),
       ),
@@ -76,7 +84,11 @@ class _FilteredTasks extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final filter = ref.watch(taskFilterProvider);
+    final calendar = ref.watch(tasksViewProvider) == TasksView.calendar;
+    final filter = switch (ref.watch(taskFilterProvider)) {
+      final filter when calendar => filter.withoutDue(),
+      final filter => filter,
+    };
     final uid = ref.watch(currentUserProvider)?.uid ?? '';
     final projects = ref.watch(projectsProvider).value ?? const [];
     final today = DateTime.now();
@@ -115,6 +127,7 @@ class _FilteredTasks extends ConsumerWidget {
                 child: const Text('Clear filters'),
               ),
             ),
+            _ when calendar => _Width(child: TaskCalendar(shown, card: card)),
             _ when filter.sort == TaskSort.dueDate => _GroupedTasks(
               groupByDue(shown, today, (item) => item.task),
               card: card,

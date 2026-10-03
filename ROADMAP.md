@@ -299,7 +299,13 @@ Tier A is what makes this feel like a real product. The rest is optional.
 - [ ] **Notifications:** due-date reminders via Firebase Cloud Messaging and a scheduled Cloud Function.
 
 ### Tier D: stretch
-- [ ] **Calendar view** of tasks by due date.
+- [x] **Calendar view** of tasks by due date.
+  - The Tasks page has a switch beside the search box: list or calendar. The calendar shows a month, with a dot on each day for every task due then (red if overdue, grey if done, "+" after three), and the chosen day's tasks listed underneath as the usual cards.
+  - Tap a day to see it; arrows change the month and "Today" comes back. Weeks start on Sunday: the calendar takes that from the app's language, and the app is only in (US) English so far.
+  - Search and the Priority, Status and Project filters narrow the calendar too. Sorting and the "Due" filter are hidden there, since the calendar is by due date already, and a "Due" filter set in the list doesn't hide days in it.
+  - "New task" from the calendar starts with the chosen day as its due date.
+  - Tasks without a due date can't be on a calendar; a line under it says how many there are.
+  - The view and the chosen day are remembered while the app is open, like the filters. Dragging a task to another day isn't there; change its due date in the form.
 - [ ] **Recurring tasks** (daily, weekly).
 - [ ] **Labels/tags** with colours.
 - [ ] **AI assist:** "break this task into subtasks" or natural-language quick add ("Finish report by Friday high priority"), via a Cloud Function calling an LLM API. Keep API keys server-side.

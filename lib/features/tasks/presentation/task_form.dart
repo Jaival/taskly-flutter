@@ -25,16 +25,27 @@ Future<bool> showTaskForm(
   Task? task,
   String? projectId,
   Map<String, String>? members,
+  DateTime? dueDate,
 }) async =>
     await showAdaptiveSheet<bool>(
       context,
-      builder: (context) =>
-          TaskForm(task: task, projectId: projectId, members: members),
+      builder: (context) => TaskForm(
+        task: task,
+        projectId: projectId,
+        members: members,
+        dueDate: dueDate,
+      ),
     ) ??
     false;
 
 class TaskForm extends ConsumerStatefulWidget {
-  const TaskForm({super.key, this.task, this.projectId, this.members});
+  const TaskForm({
+    super.key,
+    this.task,
+    this.projectId,
+    this.members,
+    this.dueDate,
+  });
 
   /// Null to create a new task.
   final Task? task;
@@ -46,6 +57,9 @@ class TaskForm extends ConsumerStatefulWidget {
   /// Who the task can be assigned to, as user ID → name. Null for personal
   /// tasks, which have no assignee field.
   final Map<String, String>? members;
+
+  /// The due date a new task starts with. Ignored when editing.
+  final DateTime? dueDate;
 
   @override
   ConsumerState<TaskForm> createState() => _TaskFormState();
@@ -61,7 +75,10 @@ class _TaskFormState extends ConsumerState<TaskForm> {
   );
   late Priority _priority = widget.task?.priority ?? Priority.medium;
   late TaskStatus _status = widget.task?.status ?? TaskStatus.notStarted;
-  late DateTime? _dueDate = widget.task?.dueDate;
+  late DateTime? _dueDate = switch (widget.task) {
+    final task? => task.dueDate,
+    null => widget.dueDate,
+  };
   late List<ChecklistItem> _checklist = widget.task?.checklist ?? const [];
   // Shows _dueDate; the field is read-only and opens a date picker.
   final _dueText = TextEditingController();

@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../auth/data/auth_repository.dart';
 import '../../projects/data/project_repository.dart';
 import '../../tasks/data/task_repository.dart';
+import '../../tasks/domain/due_date.dart';
 import '../domain/my_task.dart';
+import '../domain/task_calendar.dart';
 import '../domain/task_filter.dart';
 
 /// The user's personal tasks, then the tasks assigned to them in each of
@@ -56,6 +58,44 @@ class TaskFilterNotifier extends Notifier<TaskFilter> {
   }
 
   void change(TaskFilter filter) => state = filter;
+}
+
+/// How the Tasks page shows its tasks.
+enum TasksView { list, calendar }
+
+/// Remembered while the app runs, like the filters.
+final tasksViewProvider = NotifierProvider<TasksViewNotifier, TasksView>(
+  TasksViewNotifier.new,
+);
+
+class TasksViewNotifier extends Notifier<TasksView> {
+  @override
+  TasksView build() => TasksView.list;
+
+  void show(TasksView view) => state = view;
+}
+
+/// The day chosen in the calendar, which also decides the month it shows.
+/// Today until another is picked.
+final calendarDayProvider = NotifierProvider<CalendarDayNotifier, DateTime>(
+  CalendarDayNotifier.new,
+);
+
+class CalendarDayNotifier extends Notifier<DateTime> {
+  @override
+  DateTime build() => dateOnly(DateTime.now());
+
+  void select(DateTime day) => state = dateOnly(day);
+
+  void showToday() => select(DateTime.now());
+
+  /// Moves [months] forward, or back if negative. Lands on today in the
+  /// current month and on the 1st in any other.
+  void showMonth(int months) {
+    final month = DateTime(state.year, state.month + months);
+    final today = dateOnly(DateTime.now());
+    state = sameMonth(month, today) ? today : month;
+  }
 }
 
 /// A request to put the cursor in the Tasks page's search box: the "/"
