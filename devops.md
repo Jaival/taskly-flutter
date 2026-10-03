@@ -67,6 +67,9 @@ Three consequences of this design:
 | **Riverpod 3** | State management and dependency injection. | Compile-safe, easy to test, handles loading and error states for you. It's the successor to `provider`, which v1 used. | Provider, Bloc, GetX |
 | **go_router 18** | URL-based navigation, maintained by the Flutter team. | Real URLs on web (`/projects`), browser back button, deep links, auth redirects in one place. | Navigator 1.0 (v1), auto_route |
 | **Material 3** | Google's current design system, built into Flutter. | Modern look, dark mode and accessibility for free. | Cupertino, custom design |
+| **connectivity_plus** | Tells the app whether the device has a network. | For the "You're offline" banner, and to stop forms waiting for a server that can't be reached. | Pinging a server, `internet_connection_checker` |
+| **web** | Dart's typed access to browser APIs. | Only `core/data/web_app_browser.dart` uses it, to talk to the service worker and to hear the browser's offer to install the app. | `dart:html` (removed from Flutter web), hand-written JavaScript |
+| **share_plus** | Opens the phone's share sheet. | To hand an exported file to the user on Android and iOS, where an app can't just "download" one. In a browser the app downloads the file itself (`core/data/file_export_browser.dart`). | `file_saver`, `path_provider` plus a file picker |
 | **google_fonts** | Loads Google Fonts at runtime. | Keeps Montserrat from v1 without bundling font files. | Bundled font assets |
 | **flutter_lints** | Recommended static analysis rules. | Catches bugs and style issues before they run. | very_good_analysis |
 | **GitHub Actions** | CI/CD: runs scripts on GitHub's machines when you push. | Free for public repos, lives next to the code. | GitLab CI, Codemagic |
@@ -166,14 +169,17 @@ taskly-flutter/
 │       ├── projects/  tasks/  sharing/  profile/
 │       │   ├── domain/       ← Project, Task, Invite, UserProfile
 │       │   ├── data/         ← *_firestore.dart: typed collections + converters
-│       │   └── presentation/ ← placeholder pages for now
+│       │   └── presentation/ ← pages and widgets
+│       ├── my_tasks/         ← the Tasks page: your tasks from everywhere, filtered
+│       ├── account/          ← deleting your account, and everything of yours with it
 │       └── home/  landing/
 │           └── presentation/
 ├── test/                     ← mirrors lib/ (test/app ↔ lib/app, etc.)
 │   └── helpers/              ← fakes and pumpApp(), shared by all tests
-├── legacy/lib/               ← the v1 code, read-only reference, excluded from analysis
 ├── web/  android/  ios/  macos/  windows/   ← platform "host" projects
-├── assets/images/            ← images bundled into the app
+├── assets/images/            ← images bundled into the app (landing page screenshots)
+├── assets/icon/              ← app icon sources; `dart run flutter_launcher_icons` sizes them
+├── tool/                     ← one-off scripts (make_icons.py draws the icon)
 ├── .github/workflows/main.yml ← CI/CD pipeline
 ├── pubspec.yaml              ← dependencies and app metadata
 ├── pubspec.lock              ← exact resolved versions (committed)
@@ -221,10 +227,17 @@ presentation  ──►  data  ──►  domain
 ### `app/` vs `core/` vs `features/`
 
 - `features/` knows about the product ("projects", "tasks").
-- `core/` holds what several features share. `core/widgets` and `core/data` know nothing about the product (`EmptyState` could be copied into any app). `core/domain` is the exception: `Priority` and `TaskStatus` are product vocabulary, but both projects and tasks use them, and putting them in either feature would make the other depend on it.
+- `core/` holds what several features share. `core/widgets` and `core/data` know nothing about the product (`EmptyState` could be copied into any app). `core/domain` is the exception: `Priority`, `TaskStatus` and `ProjectRole` are product vocabulary, but several features use them, and putting them in one feature would make the others depend on it.
 - `app/` is the glue that knows about *all* features (the router imports every page), so nothing in `features/` should import from `app/` except the theme and `Routes` constants.
 
-**Features may import each other's `domain/`, never their `data/` or `presentation/`.** `sharing` uses `ProjectRole` from `projects/domain`, which is fine: it's a plain value. If `sharing` imported `projects/data`, a change to how projects are stored could break invites.
+**A feature's public API is its `domain/` models and its repository provider.** Other features may use those, but never its `*_firestore.dart` files. Widgets are private too, with one kind of exception: a widget built *for* another feature to embed. For example:
+
+- `ProjectRole` lived in `projects/domain` until invites needed it too. The projects feature embeds sharing's widgets, so sharing importing projects would have made a cycle; the role moved to `core/domain` instead.
+- Sign-up (in `auth`) creates the user's profile through `userProfileRepositoryProvider` from `profile/data`. It never touches the `users` collection directly, so the profile feature stays free to change how profiles are stored.
+- The project page shows `ProjectTaskList` from `tasks/presentation`. It takes plain values (`projectId`, `uid`, `canEdit`, `members`), not a `Project`, so `tasks` doesn't depend on `projects`. Dependencies between features should point one way; if two features need each other, something belongs in `core/`.
+- The same goes for sharing: the project page embeds `ProjectInvites` and opens `showInviteForm`, and the Shared page (in `projects`, since it lists projects) embeds `ReceivedInvites`. All take plain values. So the arrows are `projects → sharing, tasks, profile` and `sharing → profile, auth`, never back.
+- The Tasks page lists personal tasks *and* project tasks assigned to you, so it needs both features. It can't live in `tasks` (that would point `tasks → projects`), so it has its own feature, `my_tasks`, which depends on both. Home uses its `myTasksProvider` too. `TaskCard` takes the project's name as a plain `projectName` string for the same reason.
+- Deleting an account touches nearly everything: it leaves projects, deletes projects, tasks and the profile, then the account ([`account_deletion.dart`](lib/features/account/data/account_deletion.dart)). The Profile page can't own that (`projects` and `sharing` already depend on `profile`, for people's names), so it lives in `account`, which depends on the rest and which nothing depends on. The router hands its "Delete account" card to the Profile page as a `footer` widget. The order inside matters: check the password first (Firebase refuses to delete an account that hasn't signed in recently, and finding that out after the data was gone would leave an empty account), and delete the account last (without it, the rules would refuse the rest).
 
 ### Why models and Firestore code are separate files
 
@@ -245,9 +258,9 @@ CollectionReference<Project> projectsCollection(FirebaseFirestore db) => db
 
 We chose hand-written classes over code generators like `freezed` and `json_serializable`. There are only four models, and Dart 3 patterns keep the parsing short. Generators pay off with dozens of models, at the cost of a build step and generated files to read around.
 
-### Why is `legacy/` there?
+### Where did the v1 code go?
 
-The v1 code isn't null-safe, so it can't compile alongside Dart 3 code. Moving it to `legacy/lib/` and adding `legacy/**` to `analyzer.exclude` in `analysis_options.yaml` keeps it readable as a reference without breaking the build. Each file gets deleted once its feature is rewritten, and the whole folder goes at the end of Phase 3.
+The v1 code wasn't null-safe, so it couldn't compile alongside Dart 3 code. During Phase 3 it lived in `legacy/lib/`, excluded from analysis, as a reference; each file was deleted once its feature was rewritten, and the folder went at the end of Phase 3. To read it now, check out any commit from before then.
 
 ### The platform folders
 
@@ -256,6 +269,7 @@ The v1 code isn't null-safe, so it can't compile alongside Dart 3 code. Moving i
 | File | Why you'd touch it |
 |---|---|
 | `web/index.html`, `web/manifest.json` | Page title, description, PWA colours and icons |
+| `web/sw.js`, `web/flutter_bootstrap.js` | The service worker that keeps the web app on the device and finds updates, and the loader that starts Flutter without its own worker (section 9) |
 | `android/app/build.gradle.kts` | Android app ID (`com.jaival.taskly`), SDK versions |
 | `android/app/google-services.json` | Android Firebase config, generated by FlutterFire |
 | `ios/Runner/Info.plist` | iOS permissions (camera, notifications…) |
@@ -292,8 +306,15 @@ final authRepositoryProvider = Provider<AuthRepository>(
 
 // A live stream, exposed as AsyncValue (loading / data / error).
 final authStateProvider = StreamProvider<AppUser?>(
-  (ref) => ref.watch(authRepositoryProvider).authStateChanges(),
+  (ref) => ref.watch(authRepositoryProvider).userChanges(),
 );
+
+// Who is signed in, as a plain value. This is the one to read.
+final currentUserProvider = Provider<AppUser?>((ref) {
+  final repository = ref.watch(authRepositoryProvider);
+  final state = ref.watch(authStateProvider);
+  return state.hasValue ? state.value : repository.currentUser;
+});
 ```
 
 Providers can depend on other providers (`ref.watch(authRepositoryProvider)`). That builds a **dependency graph** Riverpod manages for you: no singletons, no passing objects through constructors.
@@ -301,7 +322,7 @@ Providers can depend on other providers (`ref.watch(authRepositoryProvider)`). T
 **`ref.watch` vs `ref.read`.** This is the most important Riverpod rule. From `_AccountMenu` in [`lib/app/app_shell.dart`](lib/app/app_shell.dart):
 
 ```dart
-final user = ref.watch(authStateProvider).value;            // in build(): rebuild when it changes
+final user = ref.watch(currentUserProvider);                 // in build(): rebuild when it changes
 ...
 onPressed: () => ref.read(authRepositoryProvider).signOut(), // in a callback: just get it once
 ```
@@ -312,6 +333,8 @@ onPressed: () => ref.read(authRepositoryProvider).signOut(), // in a callback: j
 | `ref.read` | Button handlers and other callbacks | One-off read, no subscription |
 
 Using `watch` in a callback, or `read` in `build`, is a classic bug.
+
+**Why `currentUserProvider` and not `authStateProvider.value`.** A `StreamProvider` is "loading" until its stream's first event, and while loading `.value` is null. `main()` has already waited for the saved session by then, so "null" was wrong for a moment at every start: each list asked for nobody's data, got an empty list, and Home showed "0 projects" and "No tasks yet." before the real numbers arrived. `currentUserProvider` asks the repository directly until the stream has spoken, so everything starts with the right user and shows its skeleton instead. The general rule: "loading" and "none" are different answers, and `.value` on an `AsyncValue` hides the difference.
 
 **`AsyncValue`.** A `StreamProvider` or `FutureProvider` gives you an `AsyncValue<T>` that is exactly one of loading, data or error. That replaces v1's pattern of `initialData: null` followed by `if (data == null) return Loading();`, which couldn't tell "loading" from "failed" from "empty". From Phase 3 on you'll write:
 
@@ -333,6 +356,26 @@ ProviderContainer(overrides: [
 ```
 
 The whole app then runs against the fake, with no Firebase and no network.
+
+**Families, `autoDispose`, and dead listeners.** `projectProvider('p1')` is a *family*: one provider per argument. Providers are cached until disposed, and a plain family is never disposed. That bit us: Ada opened a project and signed out, the security rules then denied her listener (Firestore stops a denied listener for good), and the provider turned the error into "not found". Bob signed in on the same device, accepted an invite to that project, and got the cached "not found".
+
+The fix, in [`project_repository.dart`](lib/features/projects/data/project_repository.dart):
+
+```dart
+final projectProvider = StreamProvider.autoDispose.family<Project?, String>((ref, id) {
+  ref
+    ..watch(currentUserProvider.select((user) => user?.uid))      // new user: new listener
+    ..watch(projectsProvider.select(                                // joined or left: new listener
+        (projects) => projects.value?.any((project) => project.id == id)));
+  return ref.watch(projectRepositoryProvider).watchProject(id)...;
+});
+```
+
+- `autoDispose` drops the provider once no widget watches it, so the next visit starts fresh.
+- Watching the user's ID rebuilds it (and so re-listens) when the account changes.
+- Watching membership re-listens when you join, even if the "not found" page stayed open meanwhile.
+
+Rule of thumb: any per-ID stream the rules might deny should be `autoDispose` and depend on the signed-in user. `test/features/projects/project_provider_test.dart` fakes the rules' behaviour to pin this down.
 
 ### 5.3 Routing with go_router
 
@@ -366,6 +409,13 @@ The logic is a **pure function**, `authRedirect()`: no widgets, no Firebase, jus
 
 **`StatefulShellRoute.indexedStack`.** The four main tabs (Home, Projects, Tasks, Shared) are *branches* of a shell. Each branch keeps its own navigation stack alive in an `IndexedStack`, so if you scroll down Projects, switch to Tasks and come back, your scroll position is still there. `AppShell` wraps all of them with the navigation UI.
 
+**Nested routes.** A project's page, `/projects/:id`, is a child `GoRoute` of the projects branch (`path: ':id'`), and `state.pathParameters['id']` holds the ID. Because it lives *inside* the branch, the navigation bar stays visible and the Projects tab stays selected. The shell hides its own app bar on nested pages (`showAppBar: state.uri.pathSegments.length <= 1`), because the detail page brings its own with a back button. That back button pops if there's something to pop, and otherwise goes to `/projects`. The second case happens when you opened the page from a link or a refresh on the web.
+
+Two consequences of pages living inside a branch:
+
+- **Safe areas.** Without the shell's app bar, whatever is at the top of the body sits under the phone's status bar. `VerifyEmailBanner` wraps the page, so when it shows it takes the status-bar padding itself and removes it from the page below (`MediaQuery.removePadding`). Otherwise the page's own app bar would leave a second gap under the banner.
+- **Modals go on the root navigator.** `context` inside a branch belongs to that branch's `Navigator`. A bottom sheet opened there appears *inside* the tab, under the navigation bar, which stays tappable. `showAdaptiveSheet` passes `useRootNavigator: true` so sheets cover the whole app, as dialogs already do.
+
 ### 5.4 Responsive layout
 
 [`lib/app/app_shell.dart`](lib/app/app_shell.dart) picks the navigation style from the window width, using the Material 3 "window size classes" in `Breakpoints` (`lib/app/theme/app_spacing.dart`):
@@ -398,13 +448,29 @@ Instead, values come from one of three places:
 - `IconButton(tooltip: 'Account')`: tooltips double as screen-reader labels, and tests find widgets by them (`find.byTooltip('Account')`).
 - `showAdaptiveSheet` pads the bottom sheet by `MediaQuery.viewInsetsOf(context).bottom` so the on-screen keyboard never covers form fields.
 
-### 5.7 Putting it together: what happens when you sign out
+### 5.7 Forms and async actions
+
+The login and sign-up pages (`lib/features/auth/presentation/`) show the pattern every form in the app follows:
+
+- **`ConsumerStatefulWidget`**, because the form owns state: text controllers, a "submitting" flag, and an error message. Controllers are created once as fields and disposed in `dispose()`. v1 created them inside `build()`, which wiped what you'd typed whenever anything rebuilt.
+- **Validate first, then submit.** `_formKey.currentState!.validate()` runs each field's `validator` (from `core/forms/validators.dart`) and shows messages under the fields. Nothing is sent until they pass.
+- **Errors the user can act on.** The repository turns `FirebaseAuthException` codes into an `AuthFailure` with a readable message (`auth/data/auth_failures.dart`). The page catches only `AuthFailure` and shows it in a `FormError`, which screen readers announce. v1 printed errors to the console and returned `null`.
+- **No double submits.** `ProgressButton` disables itself and shows a spinner while `_submitting` is true.
+- **`if (mounted)` after every `await`.** Signing in makes the router leave the page, so by the time the `await` returns the widget may be gone, and calling `setState` on it would throw. For the same reason, sign-up reads its providers and form values *before* the first `await`: `ref` and the controllers are unusable once the page is disposed.
+- **Autofill.** `AutofillGroup`, `autofillHints` and `TextInput.finishAutofillContext()` let password managers fill in and save logins.
+
+Two security details:
+
+- **"Forgot password" never says whether an account exists.** Both the message and the reset dialog read the same either way. Otherwise anyone could type emails in and learn who uses Taskly (*account enumeration*).
+- **Email verification** is needed for invites, because the rules match invites by email. The banner in the shell resends the email, and "I've verified" calls `reloadUser()`. That refreshes the ID token too, so the rules see `email_verified` straight away. This is also why the app listens to `userChanges()` rather than `authStateChanges()`: only `userChanges()` fires when the user's details change without signing in or out.
+
+### 5.8 Putting it together: what happens when you sign out
 
 This traces one user action through every piece above.
 
 1. You tap **Sign out** in the account menu. `_AccountMenu` calls `ref.read(authRepositoryProvider).signOut()`. It's `read`, not `watch`, because this is a callback.
 2. `AuthRepository.signOut()` calls Firebase, which clears the saved session.
-3. Firebase's `authStateChanges()` stream emits `null`. Two things are listening to it:
+3. Firebase's `userChanges()` stream emits `null`. Two things are listening to it:
    - `_StreamListenable` in `router.dart` calls `notifyListeners()`, which makes go_router re-run `redirect`.
    - `authStateProvider` updates, so any widget that `watch`es it rebuilds.
 4. `authRedirect(signedIn: false, uri: /projects)` returns `/login?from=/projects`, and go_router navigates there. The shell and its tabs are disposed.
@@ -414,14 +480,49 @@ Notice that no page contains "if signed out, go to login" code. Pages don't know
 
 **Why the router doesn't `watch` `authStateProvider`.** It would feel natural to write `ref.watch(authStateProvider)` inside `routerProvider`. But then every sign-in or sign-out would re-run the provider, building a brand-new `GoRouter` and throwing away the navigation stack and every tab's state. Instead the router is created once, and auth changes reach it through `refreshListenable`. The general rule: a provider that creates a long-lived object (a router, a controller, a connection) should only `watch` things that really require a new object.
 
+### 5.9 Deleting with Undo
+
+A confirmation dialog stops accidents, but an **Undo** snackbar is kinder. Projects get both (a project takes its tasks with it); tasks get only Undo. Both use `deleteWithUndo()` from `core/widgets/undo_delete.dart`:
+
+1. The user confirms. The document's path (e.g. `projects/abc`) goes into `pendingDeletionsProvider`, and lists hide anything in that set. Nothing is deleted yet.
+2. A snackbar shows "Deleted "Launch"." with **Undo** for six seconds.
+3. `await snackBar.closed` says why it closed. If the reason is `SnackBarClosedReason.action`, Undo was pressed, so the path is removed from the set and the item reappears. If it closed any other way, the delete really runs.
+
+Why not delete straight away and re-create the project on Undo? Because the rules (rightly) refuse to create a project that already has other members, or one whose `createdAt` isn't now. Waiting is simpler and always correct.
+
+Three details:
+
+- **Capture before the gap.** The `ScaffoldMessenger`, the repository and the notifier are read *before* the snackbar shows. If you delete from the detail page, that page is gone six seconds later and its `ref` and `context` can't be used any more.
+- **`persist: false`.** In current Flutter, a snackbar with an action stays open until it's dismissed, for accessibility. This one must close on its own, because closing is what confirms the delete.
+- **Tests fast-forward time.** `tester.pump(const Duration(seconds: 7))` lets the snackbar time out without the test waiting seven real seconds.
+
+### 5.10 Keyboard shortcuts
+
+`N` adds a task, `/` searches, `?` lists the shortcuts. Flutter splits a shortcut in two ([`app_shortcuts.dart`](lib/app/app_shortcuts.dart)):
+
+- **`Shortcuts`** maps a key to an **intent**, a small object that names what the user wants (`NewTaskIntent`).
+- **`Actions`** maps an intent to the code that does it.
+
+A key press goes to the widget that has the **focus**, then up through its parents until one handles it. Three things follow from that:
+
+- **Typing still works.** Each action is disabled while the focus is in a text field (`_UnlessTyping`). A disabled action doesn't handle the key, so it carries on and "n" is typed. Without this you couldn't type a word with an "n" in it.
+- **They're off in a dialog.** Forms and dialogs open on the root navigator, above the shell, so their keys never pass through the shell's `Shortcuts`. That's what we want: `N` inside a form shouldn't open another one.
+- **The focus has to stay inside the shell.** When the widget that had the focus goes away (you leave a tab), the focus falls back to the nearest `FocusScope` above it. `AppShortcuts` adds one, or it would land on the route *above* the shell and every shortcut would stop working. A test caught this.
+
+`/` and `?` are matched with `CharacterActivator`, by the character typed, because they're on different keys on different keyboard layouts. `N` uses `SingleActivator`, which also checks that Ctrl isn't held, so the browser's Ctrl+N still opens a window.
+
+`/` can be pressed on any page, but the search box belongs to the Tasks page. So the shell switches tab and leaves a request in `taskSearchRequestProvider`; the search box takes the focus once its page is in front. `Esc` needs no code for dialogs and menus (Flutter closes them); the search box adds its own, to clear the search.
+
+
 ---
 
 ## 6. Testing
 
 There are two test suites:
 
-- **Dart tests** (`test/`, 51 tests): run with `flutter test`. Takes a few seconds.
-- **Security rules tests** (`rules_test/`, 42 tests): run with `npm test` inside `rules_test/`. This starts the Firestore emulator, runs the tests, and stops it. See [section 11](#11-firestore-primer-read-before-phase-2).
+- **Dart tests** (`test/`, 389 tests): run with `flutter test`. Takes a few seconds.
+- **Service worker tests** (`web_test/`, 19 tests): run with `node --test "web_test/*.test.mjs"`. No install step: they load `web/sw.js` into an imitation of a browser (section 9).
+- **Security rules tests** (`rules_test/`, 63 tests): run with `npm test` inside `rules_test/`. This starts the Firestore emulator, runs the tests, and stops it. If the emulators are already running (you'd get "port taken"), use them instead: `FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npm run test:only`. The tests load `firestore.rules` fresh each run. See [section 11](#11-firestore-primer-read-before-phase-2).
 
 ### The testing pyramid
 
@@ -441,9 +542,14 @@ There are two test suites:
 | `test/app/router_test.dart` → `authRedirect` group | Unit | Every redirect rule, including the open-redirect guard |
 | `test/app/router_test.dart` → `navigation` group | Widget | Deep links, sign-in continues to the target, sign-out, 404 |
 | `test/app/app_shell_test.dart` | Widget | Right nav widget at each width, tabs switch, profile back button |
+| `test/app/page_title_test.dart` | Widget | The browser title follows the visible page, including after Back and tab switches |
+| `test/app/accessibility_test.dart` | Widget | Every main page in light and dark mode meets Flutter's contrast, tap-target and label guidelines; nothing overflows with text at 200%; logging in and ticking off a task work with only a keyboard |
 | `test/core/dialogs_test.dart` | Widget | Sheet vs dialog by width, confirm returns true/false |
 | `test/core/domain/enums_test.dart` | Unit | Enum parsing and fallbacks, one colour per priority |
 | `test/features/*/…_test.dart` (projects, tasks, sharing, profile) | Unit | Models, and converters round-tripping through `FakeFirebaseFirestore` (including malformed documents) |
+| `test/features/*/…_repository_test.dart` | Unit | Each repository's reads and writes against `FakeFirebaseFirestore` |
+| `test/features/*/…_page_test.dart`, `sharing_test.dart` | Widget | Each feature's pages, forms and cards through the real app: create, edit, delete with Undo, roles, invites, layouts at phone and desktop widths |
+| `test/features/projects/project_provider_test.dart` | Unit | Per-project listeners restart after a switch of account or a join (section 5.2) |
 | `rules_test/firestore.test.js` | Integration | Every security rule, allowed *and* denied cases, against the real rules engine in the emulator |
 
 ### Fakes, not mocks
@@ -480,7 +586,7 @@ test("an editor can't change roles", async () => {
 
 ### Rule of thumb
 
-Every bug you fix gets a test that would have caught it. The v1 bugs listed in the roadmap (like the sharing bug and the endless delete listener) are the kind of thing Phase 3's repository tests should pin down.
+Every bug you fix gets a test that would have caught it. The v1 bugs listed in the roadmap and the ones found on a device in Phase 3 have tests: see "choosing a priority keeps what was typed", "deleting a project deletes its tasks, and nobody else's", `retried deletes` in the rules tests, and `project_provider_test.dart`.
 
 ---
 
@@ -512,6 +618,17 @@ What *actually* protects your data:
 
 Things that **are** secret and must never be committed: service account JSON files, third-party API keys (for example an LLM key for the Phase 4 AI feature), and signing keystores for Android and iOS releases. Those go in GitHub Actions *secrets* or Cloud Functions config, never in the repo.
 
+### Turning on Google sign-in
+
+"Continue with Google" is in the code, but Firebase refuses it until the provider is switched on. Once, in the Firebase console:
+
+1. **Authentication → Sign-in method → Add new provider → Google**, enable it and pick a support email.
+2. **Authentication → Settings → Authorised domains**: add the domain the site is served from (`localhost` is there already).
+
+It's web only for now. In a browser Firebase opens Google's window itself (`signInWithPopup`), so there's nothing to install. Android and iOS need the `google_sign_in` package plus a SHA-1 fingerprint (Android) and a URL scheme (iOS) registered in the console, so `AuthRepository.supportsGoogleSignIn` is false there and the button isn't shown.
+
+Someone who signs in with Google has no Taskly password. `AppUser.hasPassword` is false for them: the Profile page says so instead of offering "Change password", and deleting the account confirms with Google's window instead of a password.
+
 ### Line endings
 
 `.gitattributes` has `* text=auto`, so Git stores files with LF line endings and converts them to CRLF on checkout on Windows. The `LF will be replaced by CRLF` warnings you see on `git add` are expected and harmless.
@@ -535,9 +652,12 @@ Things that **are** secret and must never be committed: service account JSON fil
  └──────────────────────────┬──────────────────────────────┘
  ┌──────────────── job: rules (runs in parallel) ──────────┐
  │ Java 21 + Node 24 → npm ci → npm test                   │
- │ (Firestore emulator + 42 security rules tests)          │
+ │ (Firestore emulator + 63 security rules tests)          │
  └──────────────────────────┬──────────────────────────────┘
-                            │ only if BOTH passed AND branch is main
+ ┌──────────────── job: web (runs in parallel) ────────────┐
+ │ Node 24 → node --test   (19 service worker tests)       │
+ └──────────────────────────┬──────────────────────────────┘
+                            │ only if ALL passed AND branch is main
                             ▼
  ┌──────────────── job: deploy ────────────────────────────┐
  │ flutter build web --base-href /taskly-flutter/           │
@@ -553,7 +673,7 @@ Things that **are** secret and must never be committed: service account JSON fil
 - **`cache: true`:** reuses the Flutter SDK download between runs, which saves about a minute per run.
 - **`concurrency` + `cancel-in-progress`:** if you push twice quickly, the first run is cancelled instead of wasting minutes.
 - **`permissions: contents: read`** at the top, with `pages: write` only on the deploy job: the *principle of least privilege*. A compromised step in `check` can't publish anything.
-- **`needs: [check, rules]`:** deploy only runs if every check passed. `check` and `rules` run at the same time on separate machines, so the pipeline takes as long as the slower one.
+- **`needs: [check, rules, web]`:** deploy only runs if every check passed. The three run at the same time on separate machines, so the pipeline takes as long as the slowest one.
 - **`actions/cache` for `~/.cache/firebase/emulators`:** the Firestore emulator is a large download; caching it makes the rules job much faster after the first run.
 - **`npm ci` (not `npm install`):** installs exactly what `package-lock.json` says and fails if it's out of date. It's the npm version of committing `pubspec.lock`.
 - **`dart format --set-exit-if-changed`:** fails if any file isn't formatted. Run `dart format lib test` before pushing.
@@ -593,6 +713,71 @@ upgrade     ●──●──●──●──●    ← work here, open a PR,
 
 Hot reload: while `flutter run` is running, press `r` to reload code changes in under a second while keeping app state, and `R` for a full restart.
 
+### Releasing on Android
+
+`flutter run` installs a **debug** build: slow, big, and signed with a key every Android SDK has. A phone or the Play Store wants a **release** build signed with a key that's yours. The project is set up so that the key is the only missing piece.
+
+1. **Make the upload key**, once. Keep the file and its password somewhere safe and out of the project; without them you can't publish updates.
+   ```
+   keytool -genkey -v -keystore %USERPROFILE%\upload-keystore.jks -keyalg RSA -storetype JKS -keysize 2048 -validity 10000 -alias upload
+   ```
+   (`keytool` comes with Java: Android Studio's is in its `jbr\bin` folder.)
+2. **Tell the build where it is**, in a new file `android/key.properties`. It's in `.gitignore`: it holds passwords.
+   ```properties
+   storePassword=<the password you chose>
+   keyPassword=<the same>
+   keyAlias=upload
+   storeFile=C:/Users/you/upload-keystore.jks
+   ```
+   Use forward slashes in the path. In this kind of file a backslash starts an escape, so `C:\Users\...` silently becomes something else and the build fails.
+3. **Build.** `flutter build appbundle` for the Play Store (an `.aab`), or `flutter build apk --release` for a file you can install directly.
+
+`android/app/build.gradle.kts` reads `key.properties` if it exists and signs with that key. If it doesn't, release builds are signed with the debug key, so `flutter run --release` still works on any machine, but the Play Store refuses such a build.
+
+Each upload needs a higher **version code** than the last: that's the number after the `+` in `version: 2.0.0+1` in `pubspec.yaml`.
+
+Two things that only show up in release builds:
+
+- **The code is shrunk** (unused classes are removed), which is where apps using Firebase tend to break. Taskly's release build has been tried: signing in, reading and writing.
+- **Plain `http://` is blocked.** That's what you want in production, where everything is `https://`, but the Firebase emulators speak plain HTTP, so a release build can't use them: signing in fails with "Something went wrong", and the device log says `Cleartext HTTP traffic to 10.0.2.2 not permitted`. Debug builds allow it (`android/app/src/debug/AndroidManifest.xml`). To try a release build against the emulators, add `android:usesCleartextTraffic="true"` to `<application>` in the main manifest for the test, and take it out again.
+
+### Installing the app, and updating it
+
+On the web, Taskly is a **PWA** (progressive web app): a site the browser can install like an app, and that opens without a connection. Two files make it one.
+
+**`web/manifest.json`** tells the browser the app's name, icons and colours. With it, Chrome and Edge offer to install the site. That offer arrives as an event, possibly before Flutter has loaded, so a few lines in `web/index.html` keep it, and the account menu shows "Install app" while there is one.
+
+**`web/sw.js`** is a **service worker**: a script the browser runs *between* the page and the network, even when no tab is open. Ours answers the app's requests from a cache it keeps on the device. Flutter used to generate one; it no longer does, and its docs say to write your own. What it does:
+
+```
+ page asks for /projects/abc          worker                      network
+ ───────────────────────────►  "that's the app" ──► cache "taskly-app": index.html
+ page asks for main.dart.js    ──────────────────►  cache "taskly-app"
+ page asks for a font          ──────────────────►  cache "taskly-libraries"
+ page talks to Firestore       "not mine" ─────────────────────────────►
+```
+
+- **Everything a running page gets comes from one cache**, `taskly-app`, so the files always belong to the same version. A page that got a new `index.html` with an old `main.dart.js` is the classic way these break.
+- **Finding an update needs no version number.** When a page asks (a few seconds after it opens, and when you return to a tab that's been open half an hour), the worker fetches the four core files and compares them, byte for byte, with what it has. If they differ it stores the new set in a second cache, `taskly-next`, and tells every open tab. The comparison costs four small "not changed" answers from the server.
+- **Switching is the user's choice.** The tabs show "A new version of Taskly is ready" with Reload (`core/widgets/update_banner.dart`). Reload asks the worker to move `taskly-next` into `taskly-app`, and the worker tells that tab to reload. Other tabs keep running until they're reloaded too. If nobody presses it, the switch happens the next time the app is opened with no other tab on the old version.
+- **Firebase is left alone.** Requests to Firestore and Auth go straight to the network; their offline behaviour is Firestore's own (section 11). So are the paths under `/__/`, which Firebase Hosting uses for signing in with Google.
+
+The Dart side is `core/data/web_app.dart`: a `WebApp` with `updateReady`, `canInstall`, `applyUpdate()` and `install()`. On every platform but the web it's an object where nothing ever happens. In a browser, a **conditional import** swaps in `web_app_browser.dart`, the only file that touches browser APIs:
+
+```dart
+import 'web_app_none.dart' if (dart.library.js_interop) 'web_app_browser.dart';
+```
+
+Tests use neither: `pumpApp(webApp: ...)` passes a fake that plays the browser.
+
+Things that will save you an afternoon:
+
+- **`flutter run` never uses the worker.** It's only registered in release builds, because a worker answering from its cache would hide every code change. A release build served on `localhost` doesn't use it either, unless you ask in the browser's console: `localStorage.setItem('taskly.serviceWorker', 'on')`, then reload. To try a whole update: `flutter build web`, serve `build/web` (`python -m http.server --directory build/web`), opt in, then build again and watch the banner appear.
+- **`web/flutter_bootstrap.js` exists to *not* do something.** Flutter's default still registers `flutter_service_worker.js`, a leftover that only unregisters itself. Two workers can't share a site, and that one would evict ours, so our bootstrap loads Flutter without it.
+- **A broken worker is fixed by deploying a fixed one.** The browser re-fetches `sw.js` itself on every visit, bypassing the worker, and replaces it when the bytes differ. The caches stay, so a new worker doesn't mean a new app version. To get rid of it entirely on your own machine: DevTools → Application → Service workers → Unregister, then Storage → Clear site data.
+- **Each deploy is an update,** even one that changed nothing you can see: the compiled files differ. And since the comparison happens against whatever the server sends, a host that serves a half-finished deploy could be mistaken for a version. A missing file is ignored and tried again later; GitHub Pages and Firebase Hosting both switch versions in one step.
+- **Safari and Firefox** don't offer installation the way Chrome does, so the menu item never appears there. The worker and the update banner are standard and should work, but have only been tried in Chrome.
+
 ---
 
 ## 10. Recipe: adding a new feature
@@ -603,10 +788,9 @@ This is the pattern every Phase 3 rewrite follows. Using "projects" as the examp
 2. **Repository:** `features/projects/data/project_repository.dart`. The *only* file that imports `cloud_firestore` for projects. It converts Firestore documents into `Project`s and back, and exposes methods like `watchProjects()`, `create()`, `update()` and `delete()`.
 3. **Providers:** next to the repository. For example `projectRepositoryProvider`, and `projectsProvider` as a `StreamProvider<List<Project>>`.
 4. **Presentation:** `features/projects/presentation/`. The page `ref.watch`es the providers and `switch`es on `AsyncValue` for loading, error, empty and data states. It uses `core/widgets` and theme tokens, never raw colours.
-5. **Route:** add the path to `Routes` and a `GoRoute` in `router.dart`. Nested paths like `/projects/:id` go under the projects branch.
+5. **Route:** add the path to `Routes` and a `GoRoute` in `router.dart`, wrapped in `PageTitle('…')` so the browser tab is named. Nested paths like `/projects/:id` go under the projects branch.
 6. **Tests:** repository tests with `fake_cloud_firestore`, and widget tests with `pumpApp` plus an overridden repository provider.
-7. **Delete the legacy files** this feature replaces (they're listed per feature in the roadmap).
-8. **Run the checks** (`dart format`, `flutter analyze`, `flutter test`), then open a PR.
+7. **Run the checks** (`dart format`, `flutter analyze`, `flutter test`), then open a PR.
 
 ---
 
@@ -648,9 +832,28 @@ Two things surprise almost everyone:
 - **Rules are not filters.** `projects.get()` (all projects) is *rejected*, even if you're allowed to read some of them. Firestore refuses any query that *could* return a document you can't read. Your query must include the same condition as the rule, which is exactly what the `arrayContains: uid` query above does.
 - **Rules can read other documents** with `get()` and `exists()`, for example "you may edit a task if you're a member of its parent project". Each lookup counts as a billed read, so keep them few.
 
+A third surprise, found by testing on a device: **writes can arrive twice.** If the server applies a write but the acknowledgement is lost (a flaky network, or the emulator dropping a connection), the SDK sends it again. For a delete, the second attempt finds no document, so `resource` is `null` and a rule like `resource.data.ownerId == uid()` fails. The SDK then treats the delete as rejected and rolls back its local copy, and the app shows a project that no longer exists. That's why every `allow delete` in our rules starts with `isAlreadyDeleted()`: deleting something that isn't there changes nothing, so it's always allowed.
+
 ### Subcollections are not deleted with their parent
 
-Deleting `projects/abc` does **not** delete `projects/abc/tasks/*`. The orphaned tasks stay, invisible but still stored. The repository's `delete()` must remove the tasks first (in batches), or a Cloud Function can clean up later.
+Deleting `projects/abc` does **not** delete `projects/abc/tasks/*`. The orphaned tasks stay, invisible but still stored. `ProjectRepository.deleteProject()` fetches the tasks once and deletes them in batches of up to 500 (Firestore's limit per batch), then deletes the project. The order matters: the rules check the parent project to decide who may delete a task, so once the project is gone nobody can. A Cloud Function could do this on the server instead, but that needs the paid plan.
+
+The same goes one level down: a task's comments live in `projects/abc/tasks/t1/activity/*`, so `TaskRepository.deleteTask()` deletes those with the task, and `deleteProject()` collects them for every task.
+
+### Writing two documents together
+
+A project task has an **activity log**: one small document per comment or change, in the task's `activity` subcollection. "Alex moved this to In progress" is only worth showing if it's true, so the repository never writes the change and its log entry separately. Both go in one `WriteBatch`, which Firestore applies completely or not at all (offline too: the batch waits and is sent as one).
+
+```dart
+final batch = _db.batch()
+  ..update(_doc(task), {'status': status.name, ...});
+_log(batch, task.projectId, task.id, {ActivityKind.status: status.name});
+return batch.commit();
+```
+
+The rules see the batch as a whole. `existsAfter(...)` asks "will this document exist once the batch is done?", which is how an entry is refused for a task that doesn't exist, yet allowed in the very batch that creates the task. What the rules *can't* check is that a logged change matches what really changed, so they guarantee less: an entry is always in the caller's own name, with the server's time, and is never edited afterwards.
+
+Each entry stores its author's name next to their ID. That's **denormalising**: copying data to where it's read, instead of looking it up. The cost is that renaming yourself doesn't rename your old comments. The gain is one read instead of one per author, and a name that survives the author leaving the project or deleting their account.
 
 ### Real-time listeners
 
@@ -658,13 +861,53 @@ Deleting `projects/abc` does **not** delete `projects/abc/tasks/*`. The orphaned
 
 Firestore also keeps a local cache, so the app can show data offline and queue writes until it reconnects.
 
+### Working offline
+
+Three things make the app usable without a connection:
+
+1. **The data is on the device.** Phones cache by default. Browsers don't, so `main()` calls `keepDataOnDevice()` before anything else touches Firestore: `Settings(persistenceEnabled: true, webPersistentTabManager: WebPersistentMultipleTabManager())`. The tab manager lets several tabs share one copy; without it only the first tab gets the cache.
+2. **Writes don't wait for a server that isn't there.** A Firestore write is saved locally and shown at once, but the `Future` it returns only completes when the *server* has it. Offline, `await doc.set(...)` never returns, and a form waiting on it spins until the connection is back. So every repository takes an `AwaitWrite` and wraps its writes in it: `await _saved(batch.commit())`. In the app that's `Connection.sentOrQueued` (`core/data/connection.dart`), which waits while online and returns immediately offline, or when the connection drops mid-wait. In tests it defaults to plain waiting.
+3. **The user is told.** `OfflineBanner` in the shell listens to the same `Connection`.
+
+Limits worth knowing:
+
+- `connectivity_plus` reports whether there's a *network*, not whether the internet is reachable. On a Wi-Fi with a login page the app thinks it's online and waits, as it did before.
+- A write queued offline can still be refused by the rules once it's sent. Nobody is waiting for that answer by then; Firestore undoes the change locally. Fine for a to-do app, not for a bank.
+- Auth needs a connection. You stay signed in offline, but can't sign in.
+- The copy in the browser stays after signing out. Queries only return what matches the signed-in user, but on a shared computer the data is still on disk. Clearing it means `terminate()` then `clearPersistence()` and rebuilding every provider that holds the Firestore instance, which isn't done here.
+- Tests override `connectivityProvider` with a plain stream (`pumpApp(online: ...)`): the real plugin needs a device.
+
 ### Timestamps
 
 Use `FieldValue.serverTimestamp()` for `createdAt` and `updatedAt`, not `DateTime.now()`. Device clocks are often wrong, and a rule can check that the client didn't fake the value.
 
+A **due date** is different: it's a calendar day, not a moment. A `Timestamp` is always a moment, so "due Friday" is stored as midnight UTC on Friday (`dueDateToFirestore` in [`task_firestore.dart`](lib/features/tasks/data/task_firestore.dart)) and read back by taking that UTC date's year, month and day. Storing local midnight instead would make the task due on Thursday for someone further west. Comparisons ("overdue", "in 3 days") use `daysUntil` in [`due_date.dart`](lib/features/tasks/domain/due_date.dart), which counts calendar days, so a daylight-saving change can't make a day 23 hours long.
+
+A task also has **`completedAt`**, a server timestamp like `updatedAt`, set when the status becomes Complete and set back to null when the task is reopened (`_completedAt` in [`task_repository.dart`](lib/features/tasks/data/task_repository.dart)). `updatedAt` can't stand in for it: renaming a task finished last month would make it look finished today. The rules keep the two in step, allowing `completedAt` only while the status is `complete`, so every write that changes the status has to write `completedAt` too. Home's "done in the last 7 days" counts by the local calendar day of that moment ([`task_stats.dart`](lib/features/tasks/domain/task_stats.dart)).
+
+### Lists inside a document
+
+A task's **checklist** is a list of `{text, done}` maps in the task document itself, not a subcollection. It's small, it's only ever shown with its task, and one document means one read, one listener and no extra rules. The costs: the whole list is rewritten on every change (two people editing the same checklist at once: the last save wins), and a document can't grow past 1 MB, so the rules cap the list at 50 items. Something that grows without limit or is queried on its own belongs in a subcollection, which is where a task's comments are.
+
+### Recurring tasks
+
+A repeating task isn't one task with a list of dates. Each time is its own task document, and completing one adds the next (`setStatus` and `updateDetails` in [`task_repository.dart`](lib/features/tasks/data/task_repository.dart)). That way everything else keeps working without knowing about repetition: the next one has its own comments, checklist, status and due date, and lists, the calendar, stats and export see ordinary tasks. The date logic is in [`task_repeat.dart`](lib/features/tasks/domain/task_repeat.dart).
+
+Three things make it safe:
+
+- **One batch.** The completion and the new task are written together, or neither is.
+- **The schedule moves.** The batch takes `repeat` off the completed task and puts it on the new one. Unticking and ticking the old task again adds nothing, and two devices completing it at once can't both start a new series from it.
+- **Viewers.** A viewer can't normally create tasks. The rules make one exception, `isNextInSeries` in [`firestore.rules`](firestore.rules): a new task with `repeatedFrom` pointing at a task that was assigned to them and repeating before this write (`get`), and is complete without a schedule after it (`getAfter`). The new task must be a copy of it, still assigned to them and not started. The rules can't compare checklists item by item, so only the number of items has to match.
+
+`repeatedFrom` is written only for that check; the app never reads it.
+
 ### Indexes
 
 Single-field queries work automatically. A query that filters on one field and sorts by another needs a **composite index**. The first time you run one, Firestore throws an error containing a link that creates the index. We'll also record them in `firestore.indexes.json` so they're deployed from the repo.
+
+**The emulator doesn't check indexes.** A query that needs a missing index works locally and fails in production. So whenever a query adds a `where` on one field and an `orderBy` on another, add the index to `firestore.indexes.json` in the same commit. For example, "tasks assigned to me in this project, in list order" (`assigneeId ==`, `orderBy('order')`) has its own entry.
+
+**Why not one query for all my assigned tasks?** A *collection-group* query (`collectionGroup('tasks').where('assigneeId', '==', uid)`) reads every `tasks` collection at once. But the rules can only allow a query when every possible result passes, and "is a member of the project in this document's path" can't be checked that way. Someone who left a project and still has tasks assigned there would see them. So the Tasks page asks each of your projects separately: a few more listeners, and rules that stay simple.
 
 ### Cost
 
@@ -738,6 +981,15 @@ Always run the rules tests first. The Firebase console also has a "Rules Playgro
 | `firebase-tools no longer supports Java version before 21` | Default `JAVA_HOME` is JDK 17 | Point `JAVA_HOME` at Android Studio's `jbr` folder for that terminal (section 11) |
 | Android build: `Could not close incremental caches … compileDebugKotlin` | Kotlin's incremental cache can't handle the project (`D:`) and pub cache (`C:`) being on different drives | Already fixed: `kotlin.incremental=false` in `android/gradle.properties` |
 | `Could not start Firestore Emulator, port taken` | An earlier emulator is still running (closing the terminal window doesn't always stop the Java process) | Stop emulators with Ctrl+C. Otherwise find the process with `netstat -ano \| findstr :8080` and end it in Task Manager |
+| "Couldn't load your tasks." in a browser but not on a phone; the console says `Expandos are not allowed on … null` | On the web, asking a top-level collection for its `parent` throws inside the Firestore plugin (cloud_firestore_web 5.7), where other platforms return null | Already fixed: a task's project comes from its path (`projectIdFromTaskPath`), not from `reference.parent.parent`. Don't call `.parent` on a collection that might be top-level |
+| "That way of signing in isn't enabled for this app yet." after Continue with Google | The Google provider is off in the Firebase console | Section 7, "Turning on Google sign-in" |
+| A form's Save button spins for ever with no connection | A repository write that isn't wrapped in `_saved(...)`, so it waits for the server | Wrap it (section 11, "Working offline") |
+| Lists flash "nothing yet" when the app starts, then fill in | Something reads the user from `authStateProvider`'s `.value`, which is null while the stream is still loading | Read `currentUserProvider` instead (section 5) |
+| Running with the emulators in a browser: you're signed out, a seeded login is "incorrect", and there's no red "Running in emulator mode" strip at the bottom | A new tab that still has a saved emulator session. The auth plugin checks that session against the *real* project before `main()` can point it at the emulator, and then quietly ignores the request to switch. Until the page is reloaded, sign-in and sign-up in that tab go to production | Reload the tab once (the plugin remembers the emulator per tab after the first try). Don't sign up while the red strip is missing |
+| The web app shows an old version after a deploy | That's the service worker doing its job: the page comes from the copy on the device until the update is applied | Wait for the "new version" banner, or close every Taskly tab and reopen. To check what's there: DevTools → Application → Cache storage (section 9) |
+| A release build on `localhost` never shows the update banner | The service worker is off on localhost unless asked for | `localStorage.setItem('taskly.serviceWorker', 'on')` in the console, reload (section 9) |
+| A release build on Android can't sign in when run with the emulators; the log says `Cleartext HTTP traffic to 10.0.2.2 not permitted` | Release builds only allow `https://`, and the emulators are plain HTTP | Expected. Use a debug build with the emulators (section 9, "Releasing on Android") |
+| An exported spreadsheet shows `'=…` or `'-…` with an apostrophe in front | On purpose: a cell that starts with `=`, `+`, `-` or `@` is run as a formula by spreadsheet programs, and task titles are typed by other people | Nothing. See `_csvCell` in `my_tasks/domain/task_export.dart` |
 | App on the emulator can't reach the Firebase emulators | Emulators not running, or the app was started without the flag | Start them first; run with `--dart-define=USE_FIREBASE_EMULATORS=true` |
 
 ---

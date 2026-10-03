@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:taskly/core/domain/priority.dart';
 import 'package:taskly/core/domain/task_status.dart';
 import 'package:taskly/features/tasks/data/task_firestore.dart';
+import 'package:taskly/features/tasks/domain/checklist_item.dart';
 import 'package:taskly/features/tasks/domain/task.dart';
 
 void main() {
@@ -44,12 +45,11 @@ void main() {
     expect(saved.isPersonal, isTrue);
   });
 
-  test('due dates round-trip', () async {
-    final due = DateTime.utc(2026, 10, 1, 9);
+  test('due dates round-trip as the same calendar day', () async {
     final ref = personalTasksCollection(db).doc('t1');
-    await ref.set(task.copyWith(dueDate: () => due));
+    await ref.set(task.copyWith(dueDate: () => DateTime(2026, 10, 1, 23, 59)));
 
-    expect((await ref.get()).data()!.dueDate!.toUtc(), due);
+    expect((await ref.get()).data()!.dueDate, DateTime(2026, 10, 1));
   });
 
   test('copyWith can clear nullable fields', () {
@@ -67,5 +67,70 @@ void main() {
     await db.doc('tasks/t2').set({'title': 'x', 'order': 3});
     final saved = (await personalTasksCollection(db).doc('t2').get()).data()!;
     expect(saved.order, 3.0);
+  });
+
+  test('a checklist round-trips in order', () async {
+    final ref = personalTasksCollection(db).doc('t1');
+    final checklist = [
+      const ChecklistItem('Draft', done: true),
+      const ChecklistItem('Review'),
+    ];
+    await ref.set(task.copyWith(checklist: checklist));
+
+    final saved = (await ref.get()).data()!;
+    expect(saved.checklist, checklist);
+    expect(saved.checklistDone, 1);
+  });
+
+  test('a malformed checklist reads as what can be saved of it', () async {
+    await db.doc('tasks/t1').set({
+      'ownerId': 'alice',
+      'title': 'x',
+      'checklist': [
+        'not a map',
+        {'text': 'Kept', 'done': 'yes'},
+        {'done': true},
+      ],
+    });
+    final saved = (await personalTasksCollection(db).doc('t1').get()).data()!;
+    expect(saved.checklist, [
+      const ChecklistItem('Kept'),
+      const ChecklistItem('', done: true),
+    ]);
+
+    await db.doc('tasks/t2').set({'ownerId': 'alice', 'title': 'y'});
+    final old = (await personalTasksCollection(db).doc('t2').get()).data()!;
+    expect(old.checklist, isEmpty);
+  });
+
+  test('the completion time round-trips, and is null on older tasks', () async {
+    final ref = personalTasksCollection(db).doc('t1');
+    final completedAt = DateTime(2026, 9, 28, 14, 30);
+    await ref.set(
+      Task(
+        id: 't1',
+        ownerId: 'alice',
+        title: 'Done',
+        status: TaskStatus.complete,
+        completedAt: completedAt,
+      ),
+    );
+    expect((await ref.get()).data()!.completedAt, completedAt);
+
+    await db.doc('tasks/t2').set({
+      'ownerId': 'alice',
+      'title': 'y',
+      'status': 'complete',
+    });
+    final old = (await personalTasksCollection(db).doc('t2').get()).data()!;
+    expect(old.completedAt, isNull);
+  });
+
+  test('the project comes from the path, without asking for parents', () {
+    expect(projectIdFromTaskPath('projects/p1/tasks/t1'), 'p1');
+    expect(projectIdFromTaskPath('tasks/t1'), isNull);
+    // Not a task at all.
+    expect(projectIdFromTaskPath('projects/p1'), isNull);
+    expect(projectIdFromTaskPath('users/u1/tasks/t1'), isNull);
   });
 }

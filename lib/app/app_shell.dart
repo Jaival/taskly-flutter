@@ -2,7 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../core/data/web_app.dart';
+import '../core/widgets/offline_banner.dart';
+import '../core/widgets/update_banner.dart';
 import '../features/auth/data/auth_repository.dart';
+import '../features/auth/presentation/verify_email_banner.dart';
+import '../features/my_tasks/data/my_tasks_provider.dart';
+import '../features/projects/presentation/new_project_task.dart';
+import '../features/sharing/data/invite_repository.dart';
+import '../features/tasks/presentation/task_form.dart';
+import 'app_shortcuts.dart';
 import 'router.dart';
 import 'theme/app_spacing.dart';
 
@@ -19,12 +28,32 @@ const List<_Destination> _destinations = [
   (icon: Icons.group_outlined, selectedIcon: Icons.group, label: 'Shared'),
 ];
 
+/// Index of "Tasks" in [_destinations], where the search box is.
+const _tasksIndex = 2;
+
+/// Index of "Shared" in [_destinations], which shows how many invites are
+/// waiting.
+const _sharedIndex = 3;
+
 /// Signed-in layout. The navigation adapts to the window width:
 /// bottom bar on phones, rail on tablets, permanent drawer on desktop.
-class AppShell extends StatelessWidget {
-  const AppShell({super.key, required this.navigationShell});
+/// The keyboard shortcuts work on every page inside it, and a banner says
+/// when the device is offline.
+class AppShell extends ConsumerWidget {
+  const AppShell({
+    super.key,
+    required this.navigationShell,
+    this.showAppBar = true,
+    this.projectId,
+  });
 
   final StatefulNavigationShell navigationShell;
+
+  /// False on nested pages, which show their own app bar.
+  final bool showAppBar;
+
+  /// The project whose page is showing, if one is: where "N" adds its task.
+  final String? projectId;
 
   void _onSelect(int index) => navigationShell.goBranch(
     index,
@@ -33,29 +62,57 @@ class AppShell extends StatelessWidget {
   );
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    return AppShortcuts(
+      // In the project that's open, or a personal task anywhere else.
+      onNewTask: () => switch (projectId) {
+        final id? => showNewProjectTaskForm(context, ref, id),
+        null => showTaskForm(context),
+      },
+      onSearch: () {
+        ref.read(taskSearchRequestProvider.notifier).request();
+        navigationShell.goBranch(_tasksIndex, initialLocation: true);
+      },
+      child: _layout(context, ref),
+    );
+  }
+
+  Widget _layout(BuildContext context, WidgetRef ref) {
+    final invites = ref.watch(receivedInvitesProvider).value?.length ?? 0;
+    Widget icon(int index, {bool selected = false}) {
+      final d = _destinations[index];
+      final child = Icon(selected ? d.selectedIcon : d.icon);
+      if (index != _sharedIndex || invites == 0) return child;
+      return Badge.count(count: invites, child: child);
+    }
+
     final width = MediaQuery.sizeOf(context).width;
     final selected = navigationShell.currentIndex;
-    final appBar = AppBar(
-      title: Text(_destinations[selected].label),
-      actions: const [
-        _AccountMenu(),
-        SizedBox(width: AppSpacing.sm),
-      ],
+    final body = OfflineBanner(
+      child: UpdateBanner(child: VerifyEmailBanner(child: navigationShell)),
     );
+    final appBar = !showAppBar
+        ? null
+        : AppBar(
+            title: Text(_destinations[selected].label),
+            actions: const [
+              _AccountMenu(),
+              SizedBox(width: AppSpacing.sm),
+            ],
+          );
 
     if (width < Breakpoints.medium) {
       return Scaffold(
         appBar: appBar,
-        body: navigationShell,
+        body: body,
         bottomNavigationBar: NavigationBar(
           selectedIndex: selected,
           onDestinationSelected: _onSelect,
           destinations: [
-            for (final d in _destinations)
+            for (final (i, d) in _destinations.indexed)
               NavigationDestination(
-                icon: Icon(d.icon),
-                selectedIcon: Icon(d.selectedIcon),
+                icon: icon(i),
+                selectedIcon: icon(i, selected: true),
                 label: d.label,
               ),
           ],
@@ -69,10 +126,10 @@ class AppShell extends StatelessWidget {
             onDestinationSelected: _onSelect,
             labelType: NavigationRailLabelType.all,
             destinations: [
-              for (final d in _destinations)
+              for (final (i, d) in _destinations.indexed)
                 NavigationRailDestination(
-                  icon: Icon(d.icon),
-                  selectedIcon: Icon(d.selectedIcon),
+                  icon: icon(i),
+                  selectedIcon: icon(i, selected: true),
                   label: Text(d.label),
                 ),
             ],
@@ -93,10 +150,10 @@ class AppShell extends StatelessWidget {
                   style: Theme.of(context).textTheme.headlineSmall,
                 ),
               ),
-              for (final d in _destinations)
+              for (final (i, d) in _destinations.indexed)
                 NavigationDrawerDestination(
-                  icon: Icon(d.icon),
-                  selectedIcon: Icon(d.selectedIcon),
+                  icon: icon(i),
+                  selectedIcon: icon(i, selected: true),
                   label: Text(d.label),
                 ),
             ],
@@ -107,7 +164,7 @@ class AppShell extends StatelessWidget {
         children: [
           navigation,
           Expanded(
-            child: Scaffold(appBar: appBar, body: navigationShell),
+            child: Scaffold(appBar: appBar, body: body),
           ),
         ],
       ),
@@ -120,7 +177,8 @@ class _AccountMenu extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final user = ref.watch(authStateProvider).value;
+    final user = ref.watch(currentUserProvider);
+    final webApp = ref.watch(webAppProvider);
     final theme = Theme.of(context);
 
     return MenuAnchor(
@@ -135,6 +193,24 @@ class _AccountMenu extends ConsumerWidget {
           leadingIcon: const Icon(Icons.person_outline),
           onPressed: () => context.push(Routes.profile),
           child: const Text('Profile'),
+        ),
+        // Not on phones, which rarely have a keyboard.
+        if (MediaQuery.sizeOf(context).width >= Breakpoints.medium)
+          MenuItemButton(
+            leadingIcon: const Icon(Icons.keyboard_outlined),
+            onPressed: () => showShortcutsHelp(context),
+            child: const Text('Keyboard shortcuts'),
+          ),
+        // Only while the browser is offering it.
+        ListenableBuilder(
+          listenable: webApp,
+          builder: (context, _) => webApp.canInstall
+              ? MenuItemButton(
+                  leadingIcon: const Icon(Icons.install_desktop_outlined),
+                  onPressed: webApp.install,
+                  child: const Text('Install app'),
+                )
+              : const SizedBox.shrink(),
         ),
         MenuItemButton(
           leadingIcon: const Icon(Icons.logout),

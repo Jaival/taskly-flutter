@@ -35,6 +35,15 @@ service cloud.firestore {
       return request.resource.data;
     }
 
+    // Deleting a document that's already gone. The SDK retries a delete if
+    // the server's acknowledgement was lost, and by then the document no
+    // longer exists. Without this, the retry is denied (resource.data is
+    // null), and the app rolls back the delete and shows a document that
+    // isn't there. Allowing it reveals nothing and changes nothing.
+    function isAlreadyDeleted() {
+      return signedIn() && resource == null;
+    }
+
     function changedKeys() {
       return incoming().diff(resource.data).affectedKeys();
     }
@@ -208,7 +217,7 @@ service cloud.firestore {
 
       // Firestore doesn't delete subcollections with their parent, so the
       // app must delete the project's tasks first.
-      allow delete: if isOwner();
+      allow delete: if isAlreadyDeleted() || isOwner();
 
       // ------------------------------------------------------- project tasks
 
@@ -231,39 +240,137 @@ service cloud.firestore {
               || data.assigneeId in project().memberIds;
         }
 
+        // Only a new assignee must be a member. Someone who has left the
+        // project stays on their old tasks until an editor reassigns them,
+        // and those tasks must still be editable (and tickable) meanwhile.
+        function keepsOrHasValidAssignee() {
+          return incoming().get('assigneeId', null)
+                  == resource.data.get('assigneeId', null)
+              || hasValidAssignee(incoming());
+        }
+
+        function taskPath(id) {
+          return /databases/$(database)/documents/projects/$(projectId)/tasks/$(id);
+        }
+
+        // The next task in a series, added by a viewer when they complete
+        // the one before (the app adds it in the same batch). Only the task
+        // they were assigned, only once (completing it takes the schedule
+        // off it), and only a copy of it, still theirs and not started.
+        function isNextInSeries() {
+          let before = get(taskPath(incoming().repeatedFrom)).data;
+          let after = getAfter(taskPath(incoming().repeatedFrom)).data;
+          return isProjectMember()
+              && incoming().repeatedFrom is string
+              && before.assigneeId == uid()
+              && before.status != 'complete'
+              && before.get('repeat', null) != null
+              && after.status == 'complete'
+              && after.get('repeat', null) == null
+              && incoming().assigneeId == uid()
+              && incoming().status == 'notStarted'
+              && incoming().get('completedAt', null) == null
+              && incoming().repeat == before.repeat
+              && incoming().title == before.title
+              && incoming().description == before.description
+              && incoming().priority == before.priority
+              && incoming().get('checklist', []).size()
+                   == before.get('checklist', []).size();
+        }
+
         allow read: if isProjectMember();
 
-        allow create: if canEditProject()
+        allow create: if (canEditProject() || isNextInSeries())
             && incoming().ownerId == uid()
             && isValidTask(incoming())
             && hasValidAssignee(incoming())
             && hasCreateTimestamps();
 
         // Editors can change anything but the creator. Viewers can only move
-        // their own assigned tasks through the workflow.
+        // their own assigned tasks through the workflow, and stop one
+        // repeating as they complete it (the next one takes the schedule).
         allow update: if (
               canEditProject()
               && incoming().ownerId == resource.data.ownerId
               && isValidTask(incoming())
-              && hasValidAssignee(incoming())
+              && keepsOrHasValidAssignee()
               && hasUpdateTimestamps()
             ) || (
               isProjectMember()
               && resource.data.assigneeId == uid()
-              && changedKeys().hasOnly(['status', 'updatedAt'])
+              && changedKeys().hasOnly(
+                   ['status', 'completedAt', 'repeat', 'updatedAt'])
+              && (!changedKeys().hasAny(['repeat'])
+                  || (incoming().repeat == null
+                      && incoming().status == 'complete'))
               && isValidStatus(incoming().status)
+              && hasValidCompletedAt(incoming())
               && incoming().updatedAt == request.time
             );
 
-        allow delete: if canEditProject();
+        allow delete: if isAlreadyDeleted() || canEditProject();
+
+        // ---------------------------------------- comments and activity
+
+        // Comments on a task, and a log of the changes to it ("Alex moved
+        // this to In progress"). Entries are never edited.
+        //
+        // The rules can't tell whether a logged change really happened (the
+        // app writes the change and its entry in one batch). What they do
+        // guarantee is who wrote it: nobody can write in someone else's name.
+        match /activity/{entryId} {
+          function isValidEntry(data) {
+            return data.keys().hasOnly(
+                     ['kind', 'authorId', 'authorName', 'value', 'createdAt'])
+                && data.kind in ['comment', 'created', 'title', 'description',
+                     'status', 'priority', 'assignee', 'dueDate']
+                && data.authorId == uid()
+                && data.authorName is string && data.authorName.size() <= 100
+                && data.value is string && data.value.size() <= 2000
+                && (data.kind != 'comment' || data.value.size() > 0)
+                && data.createdAt == request.time;
+          }
+
+          allow read: if isProjectMember();
+
+          // Every member can comment. Besides that, a viewer can only log
+          // the changes a viewer can make: a task's status, and adding the
+          // next task in a series they were assigned. The task must exist
+          // once the write is done, so entries can't pile up under tasks
+          // that were deleted or never created.
+          function isLoggingNextInSeries() {
+            let task = getAfter(taskPath(taskId)).data;
+            return incoming().kind == 'created'
+                && task.get('repeatedFrom', null) != null
+                && task.ownerId == uid();
+          }
+
+          allow create: if isProjectMember()
+              && isValidEntry(incoming())
+              && (incoming().kind in ['comment', 'status']
+                  || canEditProject()
+                  || isLoggingNextInSeries())
+              && existsAfter(taskPath(taskId));
+
+          allow update: if false;
+
+          // Your own comment; or, as an editor, anything, which is also how
+          // a task's entries are deleted along with it.
+          allow delete: if isAlreadyDeleted()
+              || canEditProject()
+              || (isProjectMember()
+                  && resource.data.kind == 'comment'
+                  && resource.data.authorId == uid());
+        }
       }
     }
 
     // Shape every stored task must satisfy, personal or in a project.
     function isValidTask(data) {
       return data.keys().hasOnly(['ownerId', 'title', 'description',
-               'priority', 'status', 'assigneeId', 'dueDate', 'order',
-               'createdAt', 'updatedAt'])
+               'priority', 'status', 'assigneeId', 'dueDate', 'repeat',
+               'repeatedFrom', 'checklist', 'order', 'createdAt', 'updatedAt',
+               'completedAt'])
           && data.title is string
           && data.title.size() > 0 && data.title.size() <= 200
           && data.description is string && data.description.size() <= 5000
@@ -272,7 +379,23 @@ service cloud.firestore {
           && (data.get('assigneeId', null) == null
               || data.assigneeId is string)
           && (data.get('dueDate', null) == null || data.dueDate is timestamp)
+          && data.get('repeat', null) in [null, 'daily', 'weekly', 'monthly']
+          // The task this one follows on from, in a series.
+          && (data.get('repeatedFrom', null) == null
+              || data.repeatedFrom is string)
+          // Rules can't loop over a list, so only its size is checked; the
+          // app skips items of the wrong shape when reading.
+          && (data.get('checklist', []) is list
+              && data.get('checklist', []).size() <= 50)
+          && hasValidCompletedAt(data)
           && data.order is number;
+    }
+
+    // When the task was completed: only on a complete task. Older tasks
+    // have no such field.
+    function hasValidCompletedAt(data) {
+      return data.get('completedAt', null) == null
+          || (data.completedAt is timestamp && data.status == 'complete');
     }
 
     // --------------------------------------------------------- personal tasks
@@ -282,7 +405,8 @@ service cloud.firestore {
         return signedIn() && data.ownerId == uid();
       }
 
-      allow read, delete: if isOwnTask(resource.data);
+      allow read: if isOwnTask(resource.data);
+      allow delete: if isAlreadyDeleted() || isOwnTask(resource.data);
 
       allow create: if isOwnTask(incoming())
           && isValidTask(incoming())
@@ -345,10 +469,11 @@ service cloud.firestore {
             && incoming().status in ['accepted', 'declined']
           );
 
-      allow delete: if signedIn()
-          && (resource.data.invitedBy == uid()
-              || isInvitee(resource.data)
-              || ownsProject(resource.data.projectId));
+      allow delete: if isAlreadyDeleted()
+          || (signedIn()
+              && (resource.data.invitedBy == uid()
+                  || isInvitee(resource.data)
+                  || ownsProject(resource.data.projectId)));
     }
   }
 }

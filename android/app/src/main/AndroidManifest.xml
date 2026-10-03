@@ -1,6 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Firebase needs the network. Its own libraries ask for this too, but
+         the app shouldn't depend on them doing so. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="taskly"
+        android:label="Taskly"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

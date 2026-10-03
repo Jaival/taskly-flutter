@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 
-import '../../projects/domain/project.dart';
+import '../../../core/domain/project_role.dart';
 
 enum InviteStatus {
   pending,

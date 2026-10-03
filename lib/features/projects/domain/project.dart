@@ -1,26 +1,10 @@
 import 'package:flutter/foundation.dart';
 
 import '../../../core/domain/priority.dart';
+import '../../../core/domain/project_role.dart';
 import '../../../core/domain/task_status.dart';
 
-/// What a member may do in a project.
-enum ProjectRole {
-  /// Created the project. Can edit it, manage members and delete it.
-  owner,
-
-  /// Can edit the project and its tasks.
-  editor,
-
-  /// Can see the project and update tasks assigned to them.
-  viewer;
-
-  bool get canEdit => this != viewer;
-
-  /// Parses a stored value. Anything unknown becomes [viewer], the role with
-  /// the fewest permissions.
-  static ProjectRole fromName(Object? name) =>
-      values.asNameMap()[name] ?? viewer;
-}
+export '../../../core/domain/project_role.dart';
 
 /// A shared project, stored at `projects/{id}`.
 ///

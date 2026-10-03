@@ -9,6 +9,7 @@ environment:
 
 dependencies:
   cloud_firestore: ^6.10.0
+  connectivity_plus: ^7.3.1
   firebase_auth: ^6.7.0
   firebase_core: ^4.15.0
   flutter:
@@ -18,15 +19,41 @@ dependencies:
     sdk: flutter
   go_router: ^18.0.1
   google_fonts: ^8.2.1
+  share_plus: ^13.3.1
+  web: ^1.1.1
 
 dev_dependencies:
   fake_cloud_firestore: ^4.3.0
+  firebase_auth_mocks: ^0.15.2
+  flutter_launcher_icons: ^0.14.4
   flutter_lints: ^6.0.0
   flutter_test:
     sdk: flutter
+  mock_exceptions: ^0.8.2
 
 flutter:
   uses-material-design: true
 
   assets:
     - assets/images/
+
+# App icons for every platform, from assets/icon/ (drawn by
+# tool/make_icons.py). Regenerate with `dart run flutter_launcher_icons`.
+flutter_launcher_icons:
+  image_path: "assets/icon/icon.png"
+  android: true
+  adaptive_icon_background: "#54458D"
+  adaptive_icon_foreground: "assets/icon/foreground.png"
+  adaptive_icon_monochrome: "assets/icon/foreground.png"
+  ios: true
+  remove_alpha_ios: true
+  background_color_ios: "#54458D"
+  web:
+    generate: true
+    background_color: "#54458D"
+    theme_color: "#54458D"
+  windows:
+    generate: true
+    icon_size: 256
+  macos:
+    generate: true

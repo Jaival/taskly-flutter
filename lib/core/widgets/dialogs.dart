@@ -47,6 +47,9 @@ Future<T?> showAdaptiveSheet<T>(
   if (isPhone) {
     return showModalBottomSheet<T>(
       context: context,
+      // Above the whole app, like the dialog. Otherwise it opens inside the
+      // current tab, under the navigation bar, which stays tappable.
+      useRootNavigator: true,
       isScrollControlled: true,
       useSafeArea: true,
       showDragHandle: true,

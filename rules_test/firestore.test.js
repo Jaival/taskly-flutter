@@ -19,6 +19,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  orderBy,
   query,
   serverTimestamp,
   setDoc,
@@ -79,6 +80,17 @@ const task = (overrides = {}) => ({
   order: 0,
   createdAt: serverTimestamp(),
   updatedAt: serverTimestamp(),
+  ...overrides,
+});
+
+const activityPath = 'projects/p1/tasks/t1/activity';
+
+const entry = (overrides = {}) => ({
+  kind: 'comment',
+  authorId: 'carol',
+  authorName: 'Carol',
+  value: 'Looks good',
+  createdAt: serverTimestamp(),
   ...overrides,
 });
 
@@ -318,10 +330,42 @@ describe('projects: delete', () => {
   });
 });
 
+describe('retried deletes', () => {
+  // The SDK retries a delete whose acknowledgement was lost. The retry must
+  // succeed, or the app rolls back its local delete and shows a ghost.
+  test('deleting a document that is already gone succeeds', async () => {
+    await assertSucceeds(deleteDoc(doc(as('alice'), 'projects/gone')));
+    await assertSucceeds(deleteDoc(doc(as('bob'), 'projects/p1/tasks/gone')));
+    await assertSucceeds(deleteDoc(doc(as('dave'), 'tasks/gone')));
+    await assertSucceeds(deleteDoc(doc(as('alice'), 'invites/gone')));
+  });
+
+  test("signed-out visitors still can't delete anything", async () => {
+    await assertFails(deleteDoc(doc(signedOut(), 'projects/gone')));
+    await assertFails(deleteDoc(doc(signedOut(), 'tasks/gone')));
+  });
+
+  test("an existing document still needs permission", async () => {
+    await assertFails(deleteDoc(doc(as('bob'), 'projects/p1')));
+    await assertFails(deleteDoc(doc(as('alice'), 'tasks/personal1')));
+    await assertFails(deleteDoc(doc(as('carol'), 'projects/p1/tasks/t1')));
+  });
+});
+
 describe('project tasks', () => {
   test('members can read tasks, others cannot', async () => {
     await assertSucceeds(getDocs(collection(as('carol'), 'projects/p1/tasks')));
     await assertFails(getDocs(collection(as('dave'), 'projects/p1/tasks')));
+  });
+
+  test("the Tasks page's query: a member's assigned tasks, in order", async () => {
+    const assigned = (db, uid) => query(
+      collection(db, 'projects/p1/tasks'),
+      where('assigneeId', '==', uid),
+      orderBy('order'),
+    );
+    await assertSucceeds(getDocs(assigned(as('carol'), 'carol')));
+    await assertFails(getDocs(assigned(as('dave'), 'dave')));
   });
 
   test('editors can create tasks, viewers cannot', async () => {
@@ -335,6 +379,26 @@ describe('project tasks', () => {
     await assertFails(setDoc(doc(db, 'projects/p1/tasks/b'), task({ ownerId: 'bob', assigneeId: 'dave' })));
   });
 
+  test('a task assigned to someone who left can still be edited', async () => {
+    await seed((db) => setDoc(doc(db, 'projects/p1/tasks/t2'), task({ assigneeId: 'zed' })));
+    const db = as('bob');
+    await assertSucceeds(updateDoc(doc(db, 'projects/p1/tasks/t2'), {
+      status: 'complete',
+      updatedAt: serverTimestamp(),
+    }));
+    await assertSucceeds(updateDoc(doc(db, 'projects/p1/tasks/t2'), {
+      assigneeId: null,
+      updatedAt: serverTimestamp(),
+    }));
+  });
+
+  test("a task can't be reassigned to someone outside the project", async () => {
+    await assertFails(updateDoc(doc(as('bob'), 'projects/p1/tasks/t1'), {
+      assigneeId: 'dave',
+      updatedAt: serverTimestamp(),
+    }));
+  });
+
   test('a viewer can update the status of a task assigned to them, and nothing else', async () => {
     const db = as('carol');
     await assertSucceeds(updateDoc(doc(db, 'projects/p1/tasks/t1'), {
@@ -345,11 +409,222 @@ describe('project tasks', () => {
       title: 'Renamed',
       updatedAt: serverTimestamp(),
     }));
+    await assertFails(updateDoc(doc(db, 'projects/p1/tasks/t1'), {
+      checklist: [{ text: 'Step', done: true }],
+      updatedAt: serverTimestamp(),
+    }));
+    // Completing records when, and reopening clears it.
+    await assertSucceeds(updateDoc(doc(db, 'projects/p1/tasks/t1'), {
+      status: 'complete',
+      completedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    }));
+    await assertFails(updateDoc(doc(db, 'projects/p1/tasks/t1'), {
+      status: 'inProgress',
+      updatedAt: serverTimestamp(),
+    }));
+    await assertSucceeds(updateDoc(doc(db, 'projects/p1/tasks/t1'), {
+      status: 'inProgress',
+      completedAt: null,
+      updatedAt: serverTimestamp(),
+    }));
   });
 
   test('editors can delete tasks, viewers cannot', async () => {
     await assertFails(deleteDoc(doc(as('carol'), 'projects/p1/tasks/t1')));
     await assertSucceeds(deleteDoc(doc(as('bob'), 'projects/p1/tasks/t1')));
+  });
+});
+
+describe('comments and activity', () => {
+  beforeEach(() => seed(async (db) => {
+    await setDoc(doc(db, `${activityPath}/carols`), entry());
+    await setDoc(doc(db, `${activityPath}/bobs`), entry({ authorId: 'bob', authorName: 'Bob' }));
+    await setDoc(doc(db, `${activityPath}/moved`), entry({ kind: 'status', value: 'inProgress' }));
+  }));
+
+  test('members can read them, others cannot', async () => {
+    const latest = (db) => query(collection(db, activityPath), orderBy('createdAt'));
+    await assertSucceeds(getDocs(latest(as('carol'))));
+    await assertFails(getDocs(latest(as('dave'))));
+    await assertFails(getDocs(latest(signedOut())));
+  });
+
+  test('every member can comment, viewers included, but not outsiders', async () => {
+    await assertSucceeds(setDoc(doc(as('carol'), `${activityPath}/new1`), entry()));
+    await assertSucceeds(setDoc(doc(as('bob'), `${activityPath}/new2`), entry({ authorId: 'bob' })));
+    await assertFails(setDoc(doc(as('dave'), `${activityPath}/new3`), entry({ authorId: 'dave' })));
+  });
+
+  test('an entry is in your own name, stamped by the server, and well formed', async () => {
+    const add = (overrides) => setDoc(doc(as('carol'), `${activityPath}/new`), entry(overrides));
+    await assertFails(add({ authorId: 'alice' }));
+    await assertFails(add({ createdAt: Timestamp.fromMillis(0) }));
+    await assertFails(add({ value: '' }));
+    await assertFails(add({ value: 'x'.repeat(2001) }));
+    await assertFails(add({ authorName: 'x'.repeat(101) }));
+    await assertFails(add({ kind: 'reaction' }));
+    await assertFails(add({ pinned: true }));
+    await assertSucceeds(add({ value: 'x'.repeat(2000) }));
+  });
+
+  test('a viewer can log a status change and nothing else; an editor any change', async () => {
+    const carol = as('carol');
+    await assertSucceeds(setDoc(doc(carol, `${activityPath}/a`), entry({ kind: 'status', value: 'complete' })));
+    await assertFails(setDoc(doc(carol, `${activityPath}/b`), entry({ kind: 'title', value: 'Renamed' })));
+    await assertFails(setDoc(doc(carol, `${activityPath}/c`), entry({ kind: 'created', value: '' })));
+    await assertSucceeds(setDoc(doc(as('bob'), `${activityPath}/d`), entry({ kind: 'title', authorId: 'bob', value: 'Renamed' })));
+  });
+
+  test("the app's writes: a change and its entry in one batch", async () => {
+    // An editor creating a task.
+    const bob = as('bob');
+    const created = writeBatch(bob);
+    created.set(doc(bob, 'projects/p1/tasks/t9'), task({ ownerId: 'bob' }));
+    created.set(doc(bob, 'projects/p1/tasks/t9/activity/e1'), entry({ kind: 'created', authorId: 'bob', value: '' }));
+    await assertSucceeds(created.commit());
+
+    // A viewer ticking off the task assigned to them.
+    const carol = as('carol');
+    const done = writeBatch(carol);
+    done.update(doc(carol, 'projects/p1/tasks/t1'), {
+      status: 'complete',
+      completedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    done.set(doc(carol, `${activityPath}/e2`), entry({ kind: 'status', value: 'complete' }));
+    await assertSucceeds(done.commit());
+  });
+
+  test('no entries under a task that does not exist', async () => {
+    await assertFails(setDoc(doc(as('bob'), 'projects/p1/tasks/nope/activity/e1'), entry({ authorId: 'bob' })));
+  });
+
+  test('entries are never edited, even by their author or the owner', async () => {
+    await assertFails(updateDoc(doc(as('carol'), `${activityPath}/carols`), { value: 'Changed my mind' }));
+    await assertFails(updateDoc(doc(as('alice'), `${activityPath}/carols`), { value: 'Rewritten' }));
+  });
+
+  test("a viewer can delete their own comment, but not other people's or the log", async () => {
+    const carol = as('carol');
+    await assertFails(deleteDoc(doc(carol, `${activityPath}/bobs`)));
+    await assertFails(deleteDoc(doc(carol, `${activityPath}/moved`)));
+    await assertSucceeds(deleteDoc(doc(carol, `${activityPath}/carols`)));
+    await assertFails(deleteDoc(doc(as('dave'), `${activityPath}/bobs`)));
+  });
+
+  test("editors can delete anyone's comment, and a task together with its entries", async () => {
+    const bob = as('bob');
+    await assertSucceeds(deleteDoc(doc(bob, `${activityPath}/carols`)));
+
+    const batch = writeBatch(bob);
+    batch.delete(doc(bob, `${activityPath}/bobs`));
+    batch.delete(doc(bob, `${activityPath}/moved`));
+    batch.delete(doc(bob, 'projects/p1/tasks/t1'));
+    await assertSucceeds(batch.commit());
+  });
+
+  test('personal tasks have none', async () => {
+    const dave = as('dave');
+    await assertFails(setDoc(doc(dave, 'tasks/personal1/activity/e1'), entry({ authorId: 'dave' })));
+    await assertFails(getDocs(collection(dave, 'tasks/personal1/activity')));
+  });
+});
+
+describe('recurring tasks', () => {
+  const due = Timestamp.fromDate(new Date(Date.UTC(2026, 9, 5)));
+  const nextDue = Timestamp.fromDate(new Date(Date.UTC(2026, 9, 12)));
+
+  // t1 repeats weekly and is assigned to carol, a viewer.
+  beforeEach(() => seed((db) => setDoc(doc(db, 'projects/p1/tasks/t1'), task({
+    assigneeId: 'carol',
+    dueDate: due,
+    repeat: 'weekly',
+    checklist: [{ text: 'Draft', done: true }],
+  }))));
+
+  const next = (overrides = {}) => task({
+    ownerId: 'carol',
+    assigneeId: 'carol',
+    dueDate: nextDue,
+    repeat: 'weekly',
+    checklist: [{ text: 'Draft', done: false }],
+    order: 1,
+    repeatedFrom: 't1',
+    ...overrides,
+  });
+
+  /** The app's batch when carol ticks off t1: the next task comes with it. */
+  function completeAndContinue(db, { by = 'carol', from = 't1', nextTask = next(), stopRepeating = true } = {}) {
+    const batch = writeBatch(db);
+    batch.update(doc(db, `projects/p1/tasks/${from}`), {
+      status: 'complete',
+      completedAt: serverTimestamp(),
+      ...(stopRepeating ? { repeat: null } : {}),
+      updatedAt: serverTimestamp(),
+    });
+    batch.set(doc(db, `projects/p1/tasks/${from}/activity/e1`), entry({ kind: 'status', authorId: by, value: 'complete' }));
+    batch.set(doc(db, 'projects/p1/tasks/t9'), nextTask);
+    batch.set(doc(db, 'projects/p1/tasks/t9/activity/e2'), entry({ kind: 'created', authorId: by, value: '' }));
+    return batch.commit();
+  }
+
+  test('a viewer who completes their repeating task adds the next one', async () => {
+    await assertSucceeds(completeAndContinue(as('carol')));
+  });
+
+  test('only once: the schedule must come off the completed task', async () => {
+    await assertFails(completeAndContinue(as('carol'), { stopRepeating: false }));
+  });
+
+  test("a viewer can't add a next task on its own", async () => {
+    await assertFails(setDoc(doc(as('carol'), 'projects/p1/tasks/t9'), next()));
+  });
+
+  test('the next task must be a fresh copy, still theirs', async () => {
+    const carol = as('carol');
+    await assertFails(completeAndContinue(carol, { nextTask: next({ title: 'Something else' }) }));
+    await assertFails(completeAndContinue(carol, { nextTask: next({ priority: 'immediate' }) }));
+    await assertFails(completeAndContinue(carol, { nextTask: next({ repeat: 'daily' }) }));
+    await assertFails(completeAndContinue(carol, { nextTask: next({ assigneeId: 'bob' }) }));
+    await assertFails(completeAndContinue(carol, { nextTask: next({ status: 'complete' }) }));
+    await assertFails(completeAndContinue(carol, { nextTask: next({ checklist: [] }) }));
+  });
+
+  test("not from a task that isn't theirs, or doesn't repeat", async () => {
+    await seed(async (db) => {
+      await setDoc(doc(db, 'projects/p1/tasks/bobs'), task({ assigneeId: 'bob', dueDate: due, repeat: 'weekly' }));
+      await setDoc(doc(db, 'projects/p1/tasks/once'), task({ assigneeId: 'carol', dueDate: due }));
+    });
+    const carol = as('carol');
+    await assertFails(completeAndContinue(carol, { from: 'bobs', nextTask: next({ repeatedFrom: 'bobs' }) }));
+    await assertFails(completeAndContinue(carol, { from: 'once', nextTask: next({ repeatedFrom: 'once', repeat: null }) }));
+  });
+
+  test('a viewer can only take the schedule off as they complete the task', async () => {
+    const t1 = doc(as('carol'), 'projects/p1/tasks/t1');
+    await assertFails(updateDoc(t1, { repeat: null, updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(t1, { repeat: 'daily', updatedAt: serverTimestamp() }));
+  });
+
+  test('an editor can do the same, and change the schedule', async () => {
+    const bob = as('bob');
+    await assertSucceeds(updateDoc(doc(bob, 'projects/p1/tasks/t1'), {
+      repeat: 'monthly',
+      updatedAt: serverTimestamp(),
+    }));
+    await assertSucceeds(completeAndContinue(bob, {
+      by: 'bob',
+      nextTask: next({ ownerId: 'bob', repeat: 'monthly' }),
+    }));
+  });
+
+  test('a schedule must be one the app knows', async () => {
+    const dave = as('dave');
+    await assertSucceeds(setDoc(doc(dave, 'tasks/a'), task({ ownerId: 'dave', repeat: 'daily' })));
+    await assertSucceeds(setDoc(doc(dave, 'tasks/b'), task({ ownerId: 'dave', repeat: 'weekly', repeatedFrom: 'a' })));
+    await assertFails(setDoc(doc(dave, 'tasks/c'), task({ ownerId: 'dave', repeat: 'yearly' })));
+    await assertFails(setDoc(doc(dave, 'tasks/d'), task({ ownerId: 'dave', repeatedFrom: 7 })));
   });
 });
 
@@ -363,6 +638,48 @@ describe('personal tasks', () => {
     const db = as('dave');
     await assertSucceeds(getDocs(query(collection(db, 'tasks'), where('ownerId', '==', 'dave'))));
     await assertFails(getDocs(collection(db, 'tasks')));
+  });
+
+  test('a checklist must be a list of at most 50 items', async () => {
+    const db = as('dave');
+    const steps = (n) => Array.from({ length: n }, (_, i) => ({ text: `Step ${i}`, done: false }));
+    await assertSucceeds(setDoc(doc(db, 'tasks/new'), task({ ownerId: 'dave', checklist: steps(50) })));
+    await assertFails(setDoc(doc(db, 'tasks/new2'), task({ ownerId: 'dave', checklist: steps(51) })));
+    await assertFails(setDoc(doc(db, 'tasks/new3'), task({ ownerId: 'dave', checklist: 'Step 1' })));
+    // Older tasks have no checklist at all, and stay valid.
+    await assertSucceeds(updateDoc(doc(db, 'tasks/personal1'), {
+      title: 'Renamed',
+      updatedAt: serverTimestamp(),
+    }));
+  });
+
+  test('only a complete task has a completion time', async () => {
+    const db = as('dave');
+    const personal = doc(db, 'tasks/personal1');
+    await assertFails(updateDoc(personal, {
+      completedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    }));
+    await assertFails(updateDoc(personal, {
+      status: 'complete',
+      completedAt: 'yesterday',
+      updatedAt: serverTimestamp(),
+    }));
+    await assertSucceeds(updateDoc(personal, {
+      status: 'complete',
+      completedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    }));
+    // Edited while done: the time stays.
+    await assertSucceeds(updateDoc(personal, {
+      title: 'Renamed',
+      updatedAt: serverTimestamp(),
+    }));
+    // Reopened without clearing it.
+    await assertFails(updateDoc(personal, {
+      status: 'notStarted',
+      updatedAt: serverTimestamp(),
+    }));
   });
 
   test("a user can't create a task for someone else", async () => {
@@ -406,11 +723,41 @@ describe('invites', () => {
     await assertFails(getDoc(doc(as('dave'), 'invites', erinInviteId)));
   });
 
-  test('the invitee can list their invites by email', async () => {
+  test('the invitee can list their pending invites by email', async () => {
     const db = as('erin');
-    await assertSucceeds(
-      getDocs(query(collection(db, 'invites'), where('email', '==', users.erin))),
-    );
+    await assertSucceeds(getDocs(query(
+      collection(db, 'invites'),
+      where('email', '==', users.erin),
+      where('status', '==', 'pending'),
+    )));
+    await assertFails(getDocs(query(
+      collection(db, 'invites'),
+      where('email', '==', users.alice),
+    )));
+  });
+
+  test("the owner can list the invites they sent for a project", async () => {
+    await assertSucceeds(getDocs(query(
+      collection(as('alice'), 'invites'),
+      where('projectId', '==', 'p1'),
+      where('invitedBy', '==', 'alice'),
+    )));
+    // Without the invitedBy filter the query could return other people's.
+    await assertFails(getDocs(query(
+      collection(as('alice'), 'invites'),
+      where('projectId', '==', 'p1'),
+    )));
+  });
+
+  test('the invitee can decline, and change nothing else', async () => {
+    const db = as('erin');
+    await assertFails(updateDoc(doc(db, 'invites', erinInviteId), { role: 'editor' }));
+    await assertSucceeds(updateDoc(doc(db, 'invites', erinInviteId), { status: 'declined' }));
+  });
+
+  test('the owner can cancel an invite', async () => {
+    await assertFails(deleteDoc(doc(as('bob'), 'invites', erinInviteId)));
+    await assertSucceeds(deleteDoc(doc(as('alice'), 'invites', erinInviteId)));
   });
 });
 
