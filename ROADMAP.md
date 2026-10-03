@@ -343,7 +343,9 @@ Tier A is what makes this feel like a real product. The rest is optional.
   - The app compiles to WebAssembly, and the integration test passes compiled that way too (tried locally). The site still serves the JavaScript build: the service worker only pre-caches `main.dart.js`, so switching needs it to cache the WebAssembly files as well, and a check in Safari and Firefox.
 - [ ] **Hosting:** move from GH Pages to **Firebase Hosting**, with PR preview channels and the same project as auth and data. Keep GH Pages only if you want the public URL unchanged.
 - [ ] **Monitoring:** Firebase Analytics, plus Crashlytics if you ship mobile.
-- [ ] **README:** screenshots, a feature list, a tech-stack section, and setup steps (`flutterfire configure`, emulators, run). Useful if this goes in a portfolio.
+- [x] **README:** screenshots, a feature list, a tech-stack section, and setup steps (`flutterfire configure`, emulators, run). Useful if this goes in a portfolio.
+  - Rewritten from the 2021 placeholder: what Taskly is and a link to the live site, the features, five screenshots (light and dark, desktop and phone), the tech stack, running it against the emulators or your own Firebase project, and the tests.
+  - The screenshots are in `docs/screenshots/`, taken from the real app against the emulators with demo data. The README links to the `v1-internship` tag, which exists locally but still has to be pushed (`git push origin v1-internship`).
 - [ ] Delete the old `taskly-dc4e2` Firebase project.
 
 ---
