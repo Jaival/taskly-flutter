@@ -67,6 +67,7 @@ Three consequences of this design:
 | **Riverpod 3** | State management and dependency injection. | Compile-safe, easy to test, handles loading and error states for you. It's the successor to `provider`, which v1 used. | Provider, Bloc, GetX |
 | **go_router 18** | URL-based navigation, maintained by the Flutter team. | Real URLs on web (`/projects`), browser back button, deep links, auth redirects in one place. | Navigator 1.0 (v1), auto_route |
 | **Material 3** | Google's current design system, built into Flutter. | Modern look, dark mode and accessibility for free. | Cupertino, custom design |
+| **connectivity_plus** | Tells the app whether the device has a network. | For the "You're offline" banner, and to stop forms waiting for a server that can't be reached. | Pinging a server, `internet_connection_checker` |
 | **google_fonts** | Loads Google Fonts at runtime. | Keeps Montserrat from v1 without bundling font files. | Bundled font assets |
 | **flutter_lints** | Recommended static analysis rules. | Catches bugs and style issues before they run. | very_good_analysis |
 | **GitHub Actions** | CI/CD: runs scripts on GitHub's machines when you push. | Free for public repos, lives next to the code. | GitLab CI, Codemagic |
@@ -507,7 +508,7 @@ A key press goes to the widget that has the **focus**, then up through its paren
 
 There are two test suites:
 
-- **Dart tests** (`test/`, 324 tests): run with `flutter test`. Takes a few seconds.
+- **Dart tests** (`test/`, 338 tests): run with `flutter test`. Takes a few seconds.
 - **Security rules tests** (`rules_test/`, 63 tests): run with `npm test` inside `rules_test/`. This starts the Firestore emulator, runs the tests, and stops it. If the emulators are already running (you'd get "port taken"), use them instead: `FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npm run test:only`. The tests load `firestore.rules` fresh each run. See [section 11](#11-firestore-primer-read-before-phase-2).
 
 ### The testing pyramid
@@ -779,6 +780,22 @@ Each entry stores its author's name next to their ID. That's **denormalising**: 
 
 Firestore also keeps a local cache, so the app can show data offline and queue writes until it reconnects.
 
+### Working offline
+
+Three things make the app usable without a connection:
+
+1. **The data is on the device.** Phones cache by default. Browsers don't, so `main()` calls `keepDataOnDevice()` before anything else touches Firestore: `Settings(persistenceEnabled: true, webPersistentTabManager: WebPersistentMultipleTabManager())`. The tab manager lets several tabs share one copy; without it only the first tab gets the cache.
+2. **Writes don't wait for a server that isn't there.** A Firestore write is saved locally and shown at once, but the `Future` it returns only completes when the *server* has it. Offline, `await doc.set(...)` never returns, and a form waiting on it spins until the connection is back. So every repository takes an `AwaitWrite` and wraps its writes in it: `await _saved(batch.commit())`. In the app that's `Connection.sentOrQueued` (`core/data/connection.dart`), which waits while online and returns immediately offline, or when the connection drops mid-wait. In tests it defaults to plain waiting.
+3. **The user is told.** `OfflineBanner` in the shell listens to the same `Connection`.
+
+Limits worth knowing:
+
+- `connectivity_plus` reports whether there's a *network*, not whether the internet is reachable. On a Wi-Fi with a login page the app thinks it's online and waits, as it did before.
+- A write queued offline can still be refused by the rules once it's sent. Nobody is waiting for that answer by then; Firestore undoes the change locally. Fine for a to-do app, not for a bank.
+- Auth needs a connection. You stay signed in offline, but can't sign in.
+- The copy in the browser stays after signing out. Queries only return what matches the signed-in user, but on a shared computer the data is still on disk. Clearing it means `terminate()` then `clearPersistence()` and rebuilding every provider that holds the Firestore instance, which isn't done here.
+- Tests override `connectivityProvider` with a plain stream (`pumpApp(online: ...)`): the real plugin needs a device.
+
 ### Timestamps
 
 Use `FieldValue.serverTimestamp()` for `createdAt` and `updatedAt`, not `DateTime.now()`. Device clocks are often wrong, and a rule can check that the client didn't fake the value.
@@ -873,6 +890,7 @@ Always run the rules tests first. The Firebase console also has a "Rules Playgro
 | `Could not start Firestore Emulator, port taken` | An earlier emulator is still running (closing the terminal window doesn't always stop the Java process) | Stop emulators with Ctrl+C. Otherwise find the process with `netstat -ano \| findstr :8080` and end it in Task Manager |
 | "Couldn't load your tasks." in a browser but not on a phone; the console says `Expandos are not allowed on … null` | On the web, asking a top-level collection for its `parent` throws inside the Firestore plugin (cloud_firestore_web 5.7), where other platforms return null | Already fixed: a task's project comes from its path (`projectIdFromTaskPath`), not from `reference.parent.parent`. Don't call `.parent` on a collection that might be top-level |
 | "That way of signing in isn't enabled for this app yet." after Continue with Google | The Google provider is off in the Firebase console | Section 7, "Turning on Google sign-in" |
+| A form's Save button spins for ever with no connection | A repository write that isn't wrapped in `_saved(...)`, so it waits for the server | Wrap it (section 11, "Working offline") |
 | App on the emulator can't reach the Firebase emulators | Emulators not running, or the app was started without the flag | Start them first; run with `--dart-define=USE_FIREBASE_EMULATORS=true` |
 
 ---

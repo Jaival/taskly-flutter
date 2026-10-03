@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/widgets/top_banner.dart';
 import '../data/auth_repository.dart';
 import '../domain/app_user.dart';
 import '../domain/auth_failure.dart';
@@ -43,26 +44,7 @@ class _VerifyEmailBannerState extends ConsumerState<VerifyEmailBanner> {
     final user = ref.watch(authStateProvider).value;
     final show = user != null && !user.emailVerified;
 
-    // The same widgets either way, so verifying doesn't rebuild the page.
-    return Column(
-      children: [
-        // With no app bar above it (nested pages bring their own), the
-        // banner is at the top of the screen and must clear the status bar.
-        // The page below then shouldn't leave room for it again.
-        SafeArea(
-          top: show,
-          bottom: false,
-          child: show ? _banner(user) : const SizedBox(width: double.infinity),
-        ),
-        Expanded(
-          child: MediaQuery.removePadding(
-            context: context,
-            removeTop: show,
-            child: widget.child,
-          ),
-        ),
-      ],
-    );
+    return TopBanner(banner: show ? _banner(user) : null, child: widget.child);
   }
 
   Widget _banner(AppUser user) {

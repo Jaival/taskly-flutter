@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/data/connection.dart';
 import '../../../core/data/firestore_provider.dart';
 import '../../../core/domain/priority.dart';
 import '../../../core/domain/task_status.dart';
@@ -18,11 +19,15 @@ class TaskRepository {
     this._db, {
     DateTime Function()? clock,
     AppUser? Function()? currentUser,
+    this._saved = untilSent,
   }) : _clock = clock ?? DateTime.now,
        _currentUser = currentUser ?? _nobody;
 
   final FirebaseFirestore _db;
   final DateTime Function() _clock;
+
+  /// How long to wait for a write: not at all while offline, in the app.
+  final AwaitWrite _saved;
 
   /// Who is making the changes, for the activity log. Without one, nothing
   /// is logged.
@@ -97,7 +102,7 @@ class TaskRepository {
         ),
       );
     _log(batch, projectId, doc.id, {ActivityKind.created: ''});
-    await batch.commit();
+    await _saved(batch.commit());
     return doc.id;
   }
 
@@ -141,7 +146,7 @@ class TaskRepository {
       if (newDue != dueDateActivityValue(task.dueDate))
         ActivityKind.dueDate: newDue,
     });
-    return batch.commit();
+    return _saved(batch.commit());
   }
 
   /// Changes only the status. The rules let viewers do this, but nothing
@@ -156,7 +161,7 @@ class TaskRepository {
     if (status != task.status) {
       _log(batch, task.projectId, task.id, {ActivityKind.status: status.name});
     }
-    return batch.commit();
+    return _saved(batch.commit());
   }
 
   /// Deletes the task, and its comments and activity with it: Firestore
@@ -190,7 +195,7 @@ class TaskRepository {
     for (var i = 0; i < documents.length; i += _maxBatchWrites) {
       final batch = _db.batch();
       documents.skip(i).take(_maxBatchWrites).forEach(batch.delete);
-      await batch.commit();
+      await _saved(batch.commit());
     }
   }
 
@@ -210,11 +215,13 @@ class TaskRepository {
   Future<void> addComment(Task task, String text) async {
     final (projectId, author) = (task.projectId, _currentUser());
     if (projectId == null || author == null) return;
-    await taskActivityCollection(_db, projectId, task.id).add(
-      newActivityToFirestore(
-        kind: ActivityKind.comment,
-        author: author,
-        value: text.trim(),
+    await _saved(
+      taskActivityCollection(_db, projectId, task.id).doc().set(
+        newActivityToFirestore(
+          kind: ActivityKind.comment,
+          author: author,
+          value: text.trim(),
+        ),
       ),
     );
   }
@@ -224,11 +231,9 @@ class TaskRepository {
   Future<void> deleteComment(Task task, TaskActivity comment) async {
     final projectId = task.projectId;
     if (projectId == null) return;
-    await taskActivityCollection(
-      _db,
-      projectId,
-      task.id,
-    ).doc(comment.id).delete();
+    await _saved(
+      taskActivityCollection(_db, projectId, task.id).doc(comment.id).delete(),
+    );
   }
 
   /// Records [changes] (what changed, and to what) in the task's activity
@@ -274,6 +279,7 @@ final taskRepositoryProvider = Provider<TaskRepository>(
     ref.watch(firestoreProvider),
     // Read when a change is made, not now: the repository outlives sign-ins.
     currentUser: () => ref.read(authRepositoryProvider).currentUser,
+    saved: ref.watch(connectionProvider).sentOrQueued,
   ),
 );
 

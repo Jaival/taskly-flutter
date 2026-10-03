@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../core/widgets/offline_banner.dart';
 import '../features/auth/data/auth_repository.dart';
 import '../features/auth/presentation/verify_email_banner.dart';
 import '../features/my_tasks/data/my_tasks_provider.dart';
@@ -34,7 +35,8 @@ const _sharedIndex = 3;
 
 /// Signed-in layout. The navigation adapts to the window width:
 /// bottom bar on phones, rail on tablets, permanent drawer on desktop.
-/// The keyboard shortcuts work on every page inside it.
+/// The keyboard shortcuts work on every page inside it, and a banner says
+/// when the device is offline.
 class AppShell extends ConsumerWidget {
   const AppShell({
     super.key,
@@ -84,7 +86,9 @@ class AppShell extends ConsumerWidget {
 
     final width = MediaQuery.sizeOf(context).width;
     final selected = navigationShell.currentIndex;
-    final body = VerifyEmailBanner(child: navigationShell);
+    final body = OfflineBanner(
+      child: VerifyEmailBanner(child: navigationShell),
+    );
     final appBar = !showAppBar
         ? null
         : AppBar(

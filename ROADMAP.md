@@ -273,9 +273,15 @@ Tier A is what makes this feel like a real product. The rest is optional.
   - Each entry is written together with the change it describes, so the two can't disagree, and keeps its author's name, so it still reads properly after they leave the project or delete their account (devops.md 11).
   - Personal tasks have neither: there's nobody else to tell. Tasks made before this start with an empty history. The list shows the latest 100 entries, and cards don't show how many comments a task has.
 - [ ] **Avatar upload** via Firebase Storage.
+  - Not started, and waiting on a decision: Cloud Storage for Firebase now needs the pay-as-you-go (Blaze) plan, even to stay inside the free quota. Everything else in the app runs on the free plan.
 
 ### Tier C: platform
-- [ ] **Offline support.** Firestore persistence is on by default for mobile and can be enabled for web. Add an "offline" banner.
+- [x] **Offline support.** Firestore persistence is on by default for mobile and can be enabled for web. Add an "offline" banner.
+  - The app opens and can be used without a connection. Firestore keeps a copy of your data on the device: phones always did, and the browser is now told to as well, sharing one copy between tabs.
+  - A banner under the app bar says "You're offline. Changes are saved on this device and sent when you're back online", on every signed-in page.
+  - Forms no longer wait for the server while offline. Before, saving a task without a connection spun until it came back; now the change shows at once and is sent later (devops.md 11).
+  - Still needs a connection: signing in and up, changing your password, deleting your account. If the server refuses a change made offline (you were removed from the project meanwhile), it's undone on the device when you reconnect, without a message.
+  - "Offline" means no network at all. A Wi-Fi that isn't connected to the internet still counts as online, and there the app waits as before.
 - [ ] **Installable PWA** with an update prompt.
 - [ ] **Android/iOS builds.** The responsive UI from Phase 3 already works on phones.
 - [ ] **Notifications:** due-date reminders via Firebase Cloud Messaging and a scheduled Cloud Function.

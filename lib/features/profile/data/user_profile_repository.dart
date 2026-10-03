@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/data/connection.dart';
 import '../../../core/data/firestore_provider.dart';
 import '../../auth/data/auth_repository.dart';
 import '../domain/user_profile.dart';
@@ -8,14 +9,17 @@ import 'user_profile_firestore.dart';
 
 /// Reads and writes `users/{uid}` profiles.
 class UserProfileRepository {
-  UserProfileRepository(this._db);
+  UserProfileRepository(this._db, {this._saved = untilSent});
 
   final FirebaseFirestore _db;
+
+  /// How long to wait for a write: not at all while offline, in the app.
+  final AwaitWrite _saved;
 
   CollectionReference<UserProfile> get _users => usersCollection(_db);
 
   Future<void> createProfile(UserProfile profile) =>
-      _users.doc(profile.uid).set(profile);
+      _saved(_users.doc(profile.uid).set(profile));
 
   /// Creates the profile if it's missing, e.g. because the network dropped
   /// right after sign-up. Does nothing if it already exists.
@@ -36,13 +40,15 @@ class UserProfileRepository {
         UserProfile(uid: uid, displayName: displayName, email: email),
       );
     }
-    await doc.update({
-      'displayName': displayName,
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
+    await _saved(
+      doc.update({
+        'displayName': displayName,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }),
+    );
   }
 
-  Future<void> deleteProfile(String uid) => _users.doc(uid).delete();
+  Future<void> deleteProfile(String uid) => _saved(_users.doc(uid).delete());
 
   /// The profile, or null if it doesn't exist (yet).
   Stream<UserProfile?> watchProfile(String uid) =>
@@ -50,7 +56,10 @@ class UserProfileRepository {
 }
 
 final userProfileRepositoryProvider = Provider<UserProfileRepository>(
-  (ref) => UserProfileRepository(ref.watch(firestoreProvider)),
+  (ref) => UserProfileRepository(
+    ref.watch(firestoreProvider),
+    saved: ref.watch(connectionProvider).sentOrQueued,
+  ),
 );
 
 /// Anyone's public profile, e.g. to show a teammate's name. Null if they

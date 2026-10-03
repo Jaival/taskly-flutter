@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/data/connection.dart';
 import '../../../core/data/firestore_provider.dart';
 import '../../auth/data/auth_repository.dart';
 import '../../../core/domain/project_role.dart';
@@ -9,9 +10,12 @@ import 'invite_firestore.dart';
 
 /// Sends, answers and cancels project invites.
 class InviteRepository {
-  InviteRepository(this._db);
+  InviteRepository(this._db, {this._saved = untilSent});
 
   final FirebaseFirestore _db;
+
+  /// How long to wait for a write: not at all while offline, in the app.
+  final AwaitWrite _saved;
 
   CollectionReference<Invite> get _invites => invitesCollection(_db);
 
@@ -31,7 +35,7 @@ class InviteRepository {
       role: role,
       invitedBy: invitedBy,
     );
-    return _invites.doc(invite.id).set(invite);
+    return _saved(_invites.doc(invite.id).set(invite));
   }
 
   /// Invites [invitedBy] sent for the project that haven't been accepted.
@@ -73,14 +77,16 @@ class InviteRepository {
         'roles.$uid': invite.role.name,
         'updatedAt': FieldValue.serverTimestamp(),
       });
-    await batch.commit();
+    await _saved(batch.commit());
   }
 
-  Future<void> decline(Invite invite) =>
-      _invites.doc(invite.id).update({'status': InviteStatus.declined.name});
+  Future<void> decline(Invite invite) => _saved(
+    _invites.doc(invite.id).update({'status': InviteStatus.declined.name}),
+  );
 
   /// Withdraws an invite (the sender) or clears it away (the invitee).
-  Future<void> cancel(Invite invite) => _invites.doc(invite.id).delete();
+  Future<void> cancel(Invite invite) =>
+      _saved(_invites.doc(invite.id).delete());
 
   /// Deletes every invite [invitedBy] sent for the project, e.g. because
   /// the project is being deleted.
@@ -96,12 +102,15 @@ class InviteRepository {
     for (final doc in sent.docs) {
       batch.delete(doc.reference);
     }
-    await batch.commit();
+    await _saved(batch.commit());
   }
 }
 
 final inviteRepositoryProvider = Provider<InviteRepository>(
-  (ref) => InviteRepository(ref.watch(firestoreProvider)),
+  (ref) => InviteRepository(
+    ref.watch(firestoreProvider),
+    saved: ref.watch(connectionProvider).sentOrQueued,
+  ),
 );
 
 /// Invites waiting for the signed-in user's answer. Empty until they've

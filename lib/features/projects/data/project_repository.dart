@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/data/connection.dart';
 import '../../../core/data/firestore_provider.dart';
 import '../../../core/domain/priority.dart';
 import '../../../core/domain/task_status.dart';
@@ -12,10 +13,15 @@ import '../domain/project.dart';
 import 'project_firestore.dart';
 
 class ProjectRepository {
-  ProjectRepository(this._db) : _invites = InviteRepository(_db);
+  ProjectRepository(this._db, {AwaitWrite saved = untilSent})
+    : _saved = saved,
+      _invites = InviteRepository(_db, saved: saved);
 
   final FirebaseFirestore _db;
   final InviteRepository _invites;
+
+  /// How long to wait for a write: not at all while offline, in the app.
+  final AwaitWrite _saved;
 
   CollectionReference<Project> get _projects => projectsCollection(_db);
 
@@ -43,13 +49,15 @@ class ProjectRepository {
     Priority priority = Priority.medium,
   }) async {
     final doc = _projects.doc();
-    await doc.set(
-      Project.create(
-        id: doc.id,
-        ownerId: ownerId,
-        name: name.trim(),
-        description: description.trim(),
-        priority: priority,
+    await _saved(
+      doc.set(
+        Project.create(
+          id: doc.id,
+          ownerId: ownerId,
+          name: name.trim(),
+          description: description.trim(),
+          priority: priority,
+        ),
       ),
     );
     return doc.id;
@@ -64,32 +72,37 @@ class ProjectRepository {
     required String description,
     required Priority priority,
     required TaskStatus status,
-  }) => _projects.doc(id).update({
-    'name': name.trim(),
-    'description': description.trim(),
-    'priority': priority.name,
-    'status': status.name,
-    'updatedAt': FieldValue.serverTimestamp(),
-  });
+  }) => _saved(
+    _projects.doc(id).update({
+      'name': name.trim(),
+      'description': description.trim(),
+      'priority': priority.name,
+      'status': status.name,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }),
+  );
 
   /// Gives a member a different role. Only the owner may.
   Future<void> changeRole(
     String projectId, {
     required String uid,
     required ProjectRole role,
-  }) => _projects.doc(projectId).update({
-    'roles.$uid': role.name,
-    'updatedAt': FieldValue.serverTimestamp(),
-  });
+  }) => _saved(
+    _projects.doc(projectId).update({
+      'roles.$uid': role.name,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }),
+  );
 
   /// Takes a member out of the project: the owner removing someone, or a
   /// member leaving. Their tasks keep them as assignee until reassigned.
-  Future<void> removeMember(String projectId, {required String uid}) =>
-      _projects.doc(projectId).update({
-        'memberIds': FieldValue.arrayRemove([uid]),
-        'roles.$uid': FieldValue.delete(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+  Future<void> removeMember(String projectId, {required String uid}) => _saved(
+    _projects.doc(projectId).update({
+      'memberIds': FieldValue.arrayRemove([uid]),
+      'roles.$uid': FieldValue.delete(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    }),
+  );
 
   /// Deletes the project, all of its tasks (with their comments and
   /// activity) and the invites to it.
@@ -118,15 +131,18 @@ class ProjectRepository {
     for (var i = 0; i < documents.length; i += _maxBatchWrites) {
       final batch = _db.batch();
       documents.skip(i).take(_maxBatchWrites).forEach(batch.delete);
-      await batch.commit();
+      await _saved(batch.commit());
     }
     // Last, so the deletes above can still check membership.
-    await projectDoc.delete();
+    await _saved(projectDoc.delete());
   }
 }
 
 final projectRepositoryProvider = Provider<ProjectRepository>(
-  (ref) => ProjectRepository(ref.watch(firestoreProvider)),
+  (ref) => ProjectRepository(
+    ref.watch(firestoreProvider),
+    saved: ref.watch(connectionProvider).sentOrQueued,
+  ),
 );
 
 /// The signed-in user's projects.
