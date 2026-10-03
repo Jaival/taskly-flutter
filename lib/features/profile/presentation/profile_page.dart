@@ -11,6 +11,7 @@ import '../../../core/widgets/progress_button.dart';
 import '../../auth/data/auth_repository.dart';
 import '../../auth/domain/app_user.dart';
 import '../../auth/domain/auth_failure.dart';
+import '../../auth/presentation/change_password_dialog.dart';
 import '../data/user_profile_repository.dart';
 
 class ProfilePage extends ConsumerWidget {
@@ -203,22 +204,6 @@ class _AccountCard extends ConsumerWidget {
 
   final AppUser user;
 
-  Future<void> _sendPasswordReset(BuildContext context, WidgetRef ref) async {
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      await ref.read(authRepositoryProvider).sendPasswordReset(user.email!);
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            'We sent a link to ${user.email} to set a new password.',
-          ),
-        ),
-      );
-    } on AuthFailure catch (failure) {
-      messenger.showSnackBar(SnackBar(content: Text(failure.message)));
-    }
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = Theme.of(context).colorScheme;
@@ -241,10 +226,13 @@ class _AccountCard extends ConsumerWidget {
           ListTile(
             leading: const Icon(Icons.password),
             title: const Text('Change password'),
-            subtitle: const Text("We'll email you a link to set a new one."),
-            onTap: user.email == null
-                ? null
-                : () => _sendPasswordReset(context, ref),
+            onTap: switch (user.email) {
+              final email? => () => showChangePasswordDialog(
+                context,
+                email: email,
+              ),
+              null => null,
+            },
           ),
           const Divider(height: 1),
           ListTile(

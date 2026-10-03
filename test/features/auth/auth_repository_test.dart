@@ -92,6 +92,73 @@ void main() {
       expect(firebaseAuth.currentUser?.displayName, 'Grace Hopper');
     });
 
+    group('changePassword', () {
+      // A user of their own for each test: the mock remembers what it was
+      // told to throw for a user, even across tests.
+      Future<User> signedIn(String uid) async {
+        firebaseAuth = MockFirebaseAuth(
+          mockUser: MockUser(uid: uid, email: '$uid@example.com'),
+        );
+        repository = AuthRepository(firebaseAuth);
+        await repository.signIn(
+          email: '$uid@example.com',
+          password: 'password1',
+        );
+        return firebaseAuth.currentUser!;
+      }
+
+      test('checks the current password, then sets the new one', () async {
+        await signedIn('grace');
+        // The mock accepts any password; the wrong one is tested below.
+        await repository.changePassword(
+          currentPassword: 'password1',
+          newPassword: 'password2',
+        );
+      });
+
+      test('says so when the current password is wrong', () async {
+        final user = await signedIn('hedy');
+        whenCalling(Invocation.method(#reauthenticateWithCredential, null))
+            .on(user)
+            .thenThrow(FirebaseAuthException(code: 'invalid-credential'));
+
+        await expectLater(
+          () => repository.changePassword(
+            currentPassword: 'nope',
+            newPassword: 'password2',
+          ),
+          throwsA(
+            isA<AuthFailure>().having(
+              (f) => f.message,
+              'message',
+              'Your current password is incorrect.',
+            ),
+          ),
+        );
+      });
+
+      test('other Firebase errors become AuthFailures', () async {
+        final user = await signedIn('joan');
+        whenCalling(Invocation.method(#updatePassword, null))
+            .on(user)
+            .thenThrow(FirebaseAuthException(code: 'weak-password'));
+
+        await expectLater(
+          () => repository.changePassword(
+            currentPassword: 'password1',
+            newPassword: 'password2',
+          ),
+          throwsA(
+            isA<AuthFailure>().having(
+              (f) => f.message,
+              'message',
+              'Choose a stronger password.',
+            ),
+          ),
+        );
+      });
+    });
+
     test('userChanges reports sign-in and sign-out', () async {
       final events = repository.userChanges().map((u) => u?.uid);
       final expectation = expectLater(

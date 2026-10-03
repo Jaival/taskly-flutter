@@ -505,7 +505,7 @@ A key press goes to the widget that has the **focus**, then up through its paren
 
 There are two test suites:
 
-- **Dart tests** (`test/`, 270 tests): run with `flutter test`. Takes a few seconds.
+- **Dart tests** (`test/`, 276 tests): run with `flutter test`. Takes a few seconds.
 - **Security rules tests** (`rules_test/`, 53 tests): run with `npm test` inside `rules_test/`. This starts the Firestore emulator, runs the tests, and stops it. If the emulators are already running (you'd get "port taken"), use them instead: `FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npm run test:only`. The tests load `firestore.rules` fresh each run. See [section 11](#11-firestore-primer-read-before-phase-2).
 
 ### The testing pyramid

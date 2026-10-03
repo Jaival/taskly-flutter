@@ -254,6 +254,10 @@ Tier A is what makes this feel like a real product. The rest is optional.
 
 ### Tier B: accounts and collaboration
 - [ ] **Google sign-in**, email verification, change password, delete account.
+  - [x] Email verification: done in Phase 1 (the banner, "Resend" and "I've verified").
+  - [x] Change password: "Change password" on the Profile page asks for the current password and a new one (at least 8 characters, and different). Checking the current one is what Firebase requires before a password change, and it stops someone at an unlocked laptop locking the owner out. "Forgot it? Email me a reset link" is still there for anyone who can't remember it.
+  - [ ] Delete account.
+  - [ ] Google sign-in.
 - [ ] **Comments and an activity log** on tasks ("Alex moved this to In Progress").
 - [ ] **Avatar upload** via Firebase Storage.
 

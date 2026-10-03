@@ -99,16 +99,98 @@ void main() {
     expect(find.text('Your name is required.'), findsOneWidget);
   });
 
-  testWidgets('change password emails a reset link', (tester) async {
-    final auth = await pumpApp(
-      tester,
-      user: testUser,
-      location: Routes.profile,
-    );
-    await tester.tap(find.text('Change password'));
-    await tester.pumpAndSettle();
+  group('change password', () {
+    Future<FakeAuthRepository> openDialog(WidgetTester tester) async {
+      final auth = await pumpApp(
+        tester,
+        user: testUser,
+        location: Routes.profile,
+      );
+      await tester.tap(find.text('Change password'));
+      await tester.pumpAndSettle();
+      return auth;
+    }
 
-    expect(auth.passwordResetsSent, ['ada@example.com']);
+    Future<void> submit(
+      WidgetTester tester, {
+      required String current,
+      required String next,
+    }) async {
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Current password'),
+        current,
+      );
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'New password'),
+        next,
+      );
+      await tester.tap(find.widgetWithText(FilledButton, 'Change password'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('sets the new one, given the current one', (tester) async {
+      final auth = await openDialog(tester);
+
+      await submit(
+        tester,
+        current: FakeAuthRepository.defaultPassword,
+        next: 'a-better-password',
+      );
+
+      expect(auth.changedPassword, 'a-better-password');
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.text('Password changed.'), findsOneWidget);
+    });
+
+    testWidgets('refuses a wrong current password', (tester) async {
+      final auth = await openDialog(tester);
+
+      await submit(tester, current: 'a-guess', next: 'a-better-password');
+
+      expect(find.text('Your current password is incorrect.'), findsOneWidget);
+      expect(auth.changedPassword, isNull);
+      expect(find.byType(AlertDialog), findsOneWidget);
+    });
+
+    testWidgets('wants a new password that is long enough, and new', (
+      tester,
+    ) async {
+      final auth = await openDialog(tester);
+
+      await submit(
+        tester,
+        current: FakeAuthRepository.defaultPassword,
+        next: 'short',
+      );
+      expect(find.text('Use at least 8 characters.'), findsOneWidget);
+
+      await submit(
+        tester,
+        current: FakeAuthRepository.defaultPassword,
+        next: FakeAuthRepository.defaultPassword,
+      );
+      expect(
+        find.text('Choose a password different from the old one.'),
+        findsOneWidget,
+      );
+      expect(auth.changedPassword, isNull);
+    });
+
+    testWidgets('or emails a reset link if the current one is forgotten', (
+      tester,
+    ) async {
+      final auth = await openDialog(tester);
+
+      await tester.tap(find.text('Forgot it? Email me a reset link'));
+      await tester.pumpAndSettle();
+
+      expect(auth.passwordResetsSent, ['ada@example.com']);
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(
+        find.text('We sent a link to ada@example.com to set a new password.'),
+        findsOneWidget,
+      );
+    });
   });
 
   testWidgets('unverified emails are labelled', (tester) async {

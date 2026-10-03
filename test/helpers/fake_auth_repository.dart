@@ -21,6 +21,17 @@ class FakeAuthRepository implements AuthRepository {
   /// Emails a password reset link was sent to, in order.
   final passwordResetsSent = <String>[];
 
+  /// The signed-in user's password, unless [addAccount] gave them another.
+  static const defaultPassword = 'old-password';
+
+  /// The signed-in user's password, once it's been changed.
+  String? changedPassword;
+
+  String get _currentPassword =>
+      changedPassword ??
+      _accounts[currentUser?.email]?.password ??
+      defaultPassword;
+
   /// If set, the next call throws this instead of doing anything.
   AuthFailure? failNextWith;
 
@@ -123,6 +134,18 @@ class FakeAuthRepository implements AuthRepository {
         emailVerified: user.emailVerified,
       ),
     );
+  }
+
+  @override
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    _maybeFail();
+    if (currentPassword != _currentPassword) {
+      throw const AuthFailure('Your current password is incorrect.');
+    }
+    changedPassword = newPassword;
   }
 
   @override
