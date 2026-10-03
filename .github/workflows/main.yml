@@ -27,7 +27,7 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
       - run: flutter pub get
-      - run: dart format --output=none --set-exit-if-changed lib test
+      - run: dart format --output=none --set-exit-if-changed lib test integration_test test_driver
       - run: flutter analyze
       - run: flutter test
 
@@ -68,9 +68,45 @@ jobs:
       # web/sw.js against an imitation of a browser; nothing to install.
       - run: node --test "web_test/*.test.mjs"
 
+  integration:
+    name: Integration test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      # The emulators need Java 21+ and firebase-tools, which rules_test has.
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: rules_test/package-lock.json
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ hashFiles('rules_test/package-lock.json') }}
+      - run: npm ci
+        working-directory: rules_test
+      - run: flutter pub get
+      # The whole app in headless Chrome against the Auth and Firestore
+      # emulators, with the real rules. The runner comes with Chrome and a
+      # matching chromedriver. No Firebase login is needed for emulators.
+      - run: |
+          "$CHROMEWEBDRIVER/chromedriver" --port=4444 &
+          rules_test/node_modules/.bin/firebase emulators:exec \
+            --only auth,firestore --project taskly-9ef7d \
+            "flutter drive --driver=test_driver/integration_test.dart --target=integration_test/app_test.dart -d web-server --browser-name=chrome --headless --dart-define=USE_FIREBASE_EMULATORS=true"
+
   deploy:
     name: Deploy to GitHub Pages
-    needs: [check, rules, web]
+    needs: [check, rules, web, integration]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:

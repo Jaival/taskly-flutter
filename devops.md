@@ -518,17 +518,18 @@ A key press goes to the widget that has the **focus**, then up through its paren
 
 ## 6. Testing
 
-There are two test suites:
+There are four test suites:
 
-- **Dart tests** (`test/`, 389 tests): run with `flutter test`. Takes a few seconds.
+- **Dart tests** (`test/`, 432 tests): run with `flutter test`. Takes a minute or so.
 - **Service worker tests** (`web_test/`, 19 tests): run with `node --test "web_test/*.test.mjs"`. No install step: they load `web/sw.js` into an imitation of a browser (section 9).
-- **Security rules tests** (`rules_test/`, 63 tests): run with `npm test` inside `rules_test/`. This starts the Firestore emulator, runs the tests, and stops it. If the emulators are already running (you'd get "port taken"), use them instead: `FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npm run test:only`. The tests load `firestore.rules` fresh each run. See [section 11](#11-firestore-primer-read-before-phase-2).
+- **Integration test** (`integration_test/`, 1 test): the real app against the Firebase emulators, on a phone or in Chrome. See [below](#the-integration-test).
+- **Security rules tests** (`rules_test/`, 75 tests): run with `npm test` inside `rules_test/`. This starts the Firestore emulator, runs the tests, and stops it. If the emulators are already running (you'd get "port taken"), use them instead: `FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npm run test:only`. The tests load `firestore.rules` fresh each run. See [section 11](#11-firestore-primer-read-before-phase-2).
 
 ### The testing pyramid
 
 ```
         ▲  fewer, slower, more realistic
-       ╱ ╲      integration tests  (Phase 5: real app + Firebase emulator)
+       ╱ ╲      integration test   (real app + Firebase emulators)
       ╱   ╲
      ╱─────╲    widget tests       (render widgets, tap, check the screen)
     ╱       ╲
@@ -550,7 +551,27 @@ There are two test suites:
 | `test/features/*/…_repository_test.dart` | Unit | Each repository's reads and writes against `FakeFirebaseFirestore` |
 | `test/features/*/…_page_test.dart`, `sharing_test.dart` | Widget | Each feature's pages, forms and cards through the real app: create, edit, delete with Undo, roles, invites, layouts at phone and desktop widths |
 | `test/features/projects/project_provider_test.dart` | Unit | Per-project listeners restart after a switch of account or a join (section 5.2) |
+| `integration_test/app_test.dart` | Integration | Sign up, create a project, add a task and complete it, in the real app with real Firebase (emulated) and the real rules; then reads the result back from the server |
 | `rules_test/firestore.test.js` | Integration | Every security rule, allowed *and* denied cases, against the real rules engine in the emulator |
+
+### The integration test
+
+Widget tests fake Firebase, so they can't catch a write the rules refuse, a plugin that fails on a device, or a field the converter forgets. `integration_test/app_test.dart` runs one user's first minutes in the real app instead: sign up, create a project, add a task, tick it off. Then it reads the project and task back from the server, so it fails if the rules quietly refused something the screen showed. Each run signs up a new user, so runs don't depend on each other or on a wiped database.
+
+It can't use `pumpAndSettle`: real network calls take an unknown time and the loading skeletons never settle. `pumpUntilFound` pumps frames until what it's waiting for appears, for up to 30 seconds.
+
+With the emulators running (`firebase emulators:start --only auth,firestore`):
+
+```bash
+# On an Android emulator or phone
+flutter test integration_test -d emulator-5554 --dart-define=USE_FIREBASE_EMULATORS=true
+
+# In Chrome, which `flutter test` can't drive: start chromedriver (matching
+# your Chrome version) on port 4444 first
+flutter drive --driver=test_driver/integration_test.dart --target=integration_test/app_test.dart -d web-server --browser-name=chrome --headless --dart-define=USE_FIREBASE_EMULATORS=true
+```
+
+It refuses to run without `USE_FIREBASE_EMULATORS=true`, so it can never sign up test users in the real project. CI runs it in Chrome, starting the emulators itself with `firebase emulators:exec`, which needs no Firebase login.
 
 ### Fakes, not mocks
 
@@ -652,10 +673,14 @@ Someone who signs in with Google has no Taskly password. `AppUser.hasPassword` i
  └──────────────────────────┬──────────────────────────────┘
  ┌──────────────── job: rules (runs in parallel) ──────────┐
  │ Java 21 + Node 24 → npm ci → npm test                   │
- │ (Firestore emulator + 63 security rules tests)          │
+ │ (Firestore emulator + 75 security rules tests)          │
  └──────────────────────────┬──────────────────────────────┘
  ┌──────────────── job: web (runs in parallel) ────────────┐
  │ Node 24 → node --test   (19 service worker tests)       │
+ └──────────────────────────┬──────────────────────────────┘
+ ┌──────────────── job: integration (runs in parallel) ────┐
+ │ Flutter + Java 21 + Node 24 → Auth + Firestore emulators │
+ │ → the app in headless Chrome: sign up → task → complete  │
  └──────────────────────────┬──────────────────────────────┘
                             │ only if ALL passed AND branch is main
                             ▼
@@ -1011,7 +1036,7 @@ dart format lib test                  # format code (CI fails if you skip this)
 flutter analyze                       # lints and type errors
 
 # Run exactly what CI runs
-dart format --output=none --set-exit-if-changed lib test && flutter analyze && flutter test
+dart format --output=none --set-exit-if-changed lib test integration_test test_driver && flutter analyze && flutter test
 
 # Dependencies
 flutter pub get                       # install what's in pubspec.lock
@@ -1034,6 +1059,9 @@ firebase login:list                   # which Google account the CLI uses
 firebase emulators:start --only auth,firestore      # local Firebase (needs Java 21+)
 flutter run --dart-define=USE_FIREBASE_EMULATORS=true   # app → local Firebase
 firebase deploy --only firestore      # publish rules + indexes
+
+# Integration test (emulators running; see section 6 for Chrome)
+flutter test integration_test -d emulator-5554 --dart-define=USE_FIREBASE_EMULATORS=true
 
 # Security rules tests (in rules_test/)
 npm ci                                # first time, or after package-lock.json changes

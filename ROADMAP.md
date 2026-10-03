@@ -334,7 +334,10 @@ Tier A is what makes this feel like a real product. The rest is optional.
 
 ## Phase 5: Quality and release (ongoing, formalise at the end)
 
-- [ ] **Integration tests:** a small `integration_test` suite against the emulator for sign up → create project → add task → complete task.
+- [x] **Integration tests:** a small `integration_test` suite against the emulator for sign up → create project → add task → complete task.
+  - `integration_test/app_test.dart` does that journey in the real app, against the Auth and Firestore emulators with the real rules, then reads the project and task back from the server (devops.md 6).
+  - Runs on Android (`flutter test integration_test -d <device>`) and in Chrome (`flutter drive`, through `test_driver/`). CI runs it in headless Chrome on every PR, and deploying waits for it.
+  - Passed on the Android emulator (twice in a row, about 30 seconds) and in headless Chrome, including the CI command run while logged out of Firebase.
 - [ ] **CI:** analyze, test, and `flutter build web --wasm` on every PR. Deploy only from `main`.
 - [ ] **Hosting:** move from GH Pages to **Firebase Hosting**, with PR preview channels and the same project as auth and data. Keep GH Pages only if you want the public URL unchanged.
 - [ ] **Monitoring:** Firebase Analytics, plus Crashlytics if you ship mobile.
