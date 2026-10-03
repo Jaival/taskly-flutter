@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/data/firestore_fields.dart';
 import '../../auth/domain/app_user.dart';
 import '../domain/task_activity.dart';
+import '../domain/task_label.dart';
 
 /// The comments and changes on one project task:
 /// `projects/{projectId}/tasks/{taskId}/activity`.
@@ -63,3 +64,8 @@ String dueDateActivityValue(DateTime? due) => due == null
     : '${due.year.toString().padLeft(4, '0')}-'
           '${due.month.toString().padLeft(2, '0')}-'
           '${due.day.toString().padLeft(2, '0')}';
+
+/// Labels in the log: their names, a line each, or empty for none. Names
+/// can have commas in them, but not line breaks.
+String labelsActivityValue(List<TaskLabel> labels) =>
+    [for (final label in labels) label.name].join('\n');

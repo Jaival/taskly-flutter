@@ -24,6 +24,7 @@ void main() {
     int? dueInDays,
     String priority = 'medium',
     String? repeat,
+    List<Map<String, String>>? labels,
   }) => firestore.doc(path).set({
     'ownerId': ownerId ?? testUser.uid,
     'title': title,
@@ -33,6 +34,7 @@ void main() {
     'assigneeId': assigneeId,
     'dueDate': dueInDays == null ? null : dueTimestamp(dueInDays),
     'repeat': repeat,
+    'labels': ?labels,
     'order': order,
     'createdAt': Timestamp.now(),
     'updatedAt': Timestamp.now(),
@@ -597,6 +599,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Checklist · 1/2'), findsOneWidget);
 
+      await tester.ensureVisible(find.widgetWithText(FilledButton, 'Add task'));
       await tester.tap(find.widgetWithText(FilledButton, 'Add task'));
       await tester.pumpAndSettle();
 
@@ -728,6 +731,201 @@ void main() {
       expect(next['dueDate'], dueTimestamp(1));
       expect(next['repeat'], 'daily');
       expect(cardFor('Water plants'), findsNWidgets(2));
+    });
+  });
+
+  group('labels', () {
+    Map<String, String> label(String name, String color) => {
+      'name': name,
+      'color': color,
+    };
+
+    Future<List<Object?>?> labelsOf(String path) async =>
+        (await firestore.doc(path).get()).data()!['labels'] as List<Object?>?;
+
+    Future<void> openPicker(WidgetTester tester) async {
+      final button = find.byIcon(Icons.new_label_outlined);
+      await tester.ensureVisible(button);
+      await tester.tap(button);
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> saveForm(WidgetTester tester, String label) async {
+      final button = find.widgetWithText(FilledButton, label);
+      await tester.ensureVisible(button);
+      await tester.tap(button);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('a new label, in the colour picked', (tester) async {
+      await pumpTasks(tester);
+      await tester.tap(find.text('New task'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Title'),
+        'Buy stamps',
+      );
+
+      await openPicker(tester);
+      expect(find.text('No labels yet. Type a name to add one.'), findsOne);
+      await tester.enterText(find.byType(TextField).last, 'Errands ');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Teal'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add "Errands"'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Done'));
+      await tester.pumpAndSettle();
+      expect(find.bySemanticsLabel('Label: Errands'), findsOneWidget);
+      await saveForm(tester, 'Add task');
+
+      expect((await onlyTaskIn('tasks'))['labels'], [label('Errands', 'teal')]);
+      expect(
+        find.descendant(
+          of: cardFor('Buy stamps'),
+          matching: find.text('Errands'),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('picking one already in use keeps its colour', (tester) async {
+      await seedTask(
+        'tasks/a',
+        title: 'Logo',
+        labels: [label('Design', 'blue')],
+      );
+      await seedTask('tasks/b', title: 'Icons', order: 2);
+      await pumpTasks(tester);
+      await tester.tap(find.text('Icons'));
+      await tester.pumpAndSettle();
+
+      await openPicker(tester);
+      // Typing a name that's taken finds it rather than adding another.
+      await tester.enterText(find.byType(TextField).last, 'design');
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Add "'), findsNothing);
+      await tester.tap(find.widgetWithText(CheckboxListTile, 'Design'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Done'));
+      await tester.pumpAndSettle();
+      await saveForm(tester, 'Save');
+
+      expect(await labelsOf('tasks/b'), [label('Design', 'blue')]);
+    });
+
+    testWidgets('a label comes off with its button', (tester) async {
+      await seedTask(
+        'tasks/a',
+        title: 'Logo',
+        labels: [label('Design', 'blue'), label('Bug', 'red')],
+      );
+      await pumpTasks(tester);
+      await tester.tap(find.text('Logo'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Remove the label Design'));
+      await tester.pumpAndSettle();
+      await saveForm(tester, 'Save');
+
+      expect(await labelsOf('tasks/a'), [label('Bug', 'red')]);
+    });
+
+    testWidgets('editing a label changes it on every task', (tester) async {
+      await seedTask(
+        'tasks/a',
+        title: 'Logo',
+        labels: [label('Design', 'blue')],
+      );
+      await seedTask(
+        'tasks/b',
+        title: 'Icons',
+        order: 2,
+        labels: [label('Design', 'blue')],
+      );
+      await pumpTasks(tester);
+      await tester.tap(find.text('Logo'));
+      await tester.pumpAndSettle();
+
+      await openPicker(tester);
+      await tester.tap(find.byTooltip('Edit the label Design'));
+      await tester.pumpAndSettle();
+      expect(find.text('Changes it on all your tasks.'), findsOneWidget);
+      await tester.enterText(find.widgetWithText(TextField, 'Name'), 'UX');
+      await tester.tap(find.byTooltip('Purple'));
+      await tester.tap(find.widgetWithText(FilledButton, 'Save').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Done'));
+      await tester.pumpAndSettle();
+      // Saving the form doesn't put the old one back.
+      await saveForm(tester, 'Save');
+
+      expect(await labelsOf('tasks/a'), [label('UX', 'purple')]);
+      expect(await labelsOf('tasks/b'), [label('UX', 'purple')]);
+    });
+
+    testWidgets('deleting a label asks first', (tester) async {
+      await seedTask(
+        'tasks/a',
+        title: 'Logo',
+        labels: [label('Design', 'blue')],
+      );
+      await seedTask(
+        'tasks/b',
+        title: 'Icons',
+        order: 2,
+        labels: [label('Design', 'blue')],
+      );
+      await pumpTasks(tester);
+      await tester.tap(find.text('Icons'));
+      await tester.pumpAndSettle();
+
+      await openPicker(tester);
+      await tester.tap(find.byTooltip('Edit the label Design'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(TextButton, 'Delete'));
+      await tester.pumpAndSettle();
+      expect(find.text('Delete "Design"?'), findsOneWidget);
+      await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+      await tester.pumpAndSettle();
+      expect(find.text('No labels yet. Type a name to add one.'), findsOne);
+      await tester.tap(find.text('Done'));
+      await tester.pumpAndSettle();
+      // Closing the form without saving: it's gone all the same.
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(await labelsOf('tasks/a'), isEmpty);
+      expect(await labelsOf('tasks/b'), isEmpty);
+    });
+
+    testWidgets('the Tasks page filters by label', (tester) async {
+      await seedTask(
+        'tasks/a',
+        title: 'Logo',
+        labels: [label('Design', 'blue')],
+      );
+      await seedTask(
+        'tasks/b',
+        title: 'Crash',
+        order: 2,
+        labels: [label('Bug', 'red')],
+      );
+      await seedTask('tasks/c', title: 'Plain', order: 3);
+      await pumpTasks(tester);
+
+      // At the end of a row of chips that scrolls sideways on a phone.
+      await tester.ensureVisible(find.byTooltip('Filter by label'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Filter by label'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(CheckboxMenuButton, 'Design'));
+      await tester.pumpAndSettle();
+      await tester.tapAt(Offset.zero);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TaskCard), findsOneWidget);
+      expect(find.text('Showing 1 of 3 tasks'), findsOneWidget);
     });
   });
 }

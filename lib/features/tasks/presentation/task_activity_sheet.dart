@@ -70,6 +70,11 @@ String describeActivity(
         '$who set the due date to ${formatDueDate(localizations, due, now)}',
       null => '$who changed the due date',
     },
+    ActivityKind.labels => switch (value.split('\n')) {
+      [''] => '$who removed the labels',
+      [final label] => '$who set the label to $label',
+      final labels => '$who set the labels to ${labels.join(', ')}',
+    },
   };
 }
 
@@ -402,6 +407,7 @@ class _Change extends StatelessWidget {
     ActivityKind.priority => Icons.flag_outlined,
     ActivityKind.assignee => Icons.person_outline,
     ActivityKind.dueDate => Icons.event_outlined,
+    ActivityKind.labels => Icons.label_outline,
   };
 
   @override

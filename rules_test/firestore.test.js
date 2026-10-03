@@ -628,6 +628,71 @@ describe('recurring tasks', () => {
   });
 });
 
+describe('labels', () => {
+  const design = { name: 'Design', color: 'blue' };
+  const labels = (n) => Array.from({ length: n }, (_, i) => ({ name: `Label ${i}`, color: 'red' }));
+
+  test('a task has a list of at most 10 labels', async () => {
+    const db = as('dave');
+    await assertSucceeds(setDoc(doc(db, 'tasks/a'), task({ ownerId: 'dave', labels: labels(10) })));
+    await assertFails(setDoc(doc(db, 'tasks/b'), task({ ownerId: 'dave', labels: labels(11) })));
+    await assertFails(setDoc(doc(db, 'tasks/c'), task({ ownerId: 'dave', labels: 'Design' })));
+    await assertSucceeds(updateDoc(doc(db, 'tasks/personal1'), {
+      labels: [design],
+      updatedAt: serverTimestamp(),
+    }));
+  });
+
+  test("editors label project tasks; viewers can't, even their own", async () => {
+    const change = (db) => updateDoc(doc(db, 'projects/p1/tasks/t1'), {
+      labels: [design],
+      updatedAt: serverTimestamp(),
+    });
+    await assertFails(change(as('carol')));
+    await assertSucceeds(change(as('bob')));
+  });
+
+  test('editors can log a change of labels, viewers cannot', async () => {
+    const log = (db, uid) => setDoc(
+      doc(db, `projects/p1/tasks/t1/activity/${uid}`),
+      entry({ kind: 'labels', authorId: uid, value: 'Design' }),
+    );
+    await assertFails(log(as('carol'), 'carol'));
+    await assertSucceeds(log(as('bob'), 'bob'));
+  });
+
+  test("the next task in a series keeps the last one's labels", async () => {
+    await seed((db) => setDoc(doc(db, 'projects/p1/tasks/t1'), task({
+      assigneeId: 'carol',
+      dueDate: Timestamp.fromDate(new Date(Date.UTC(2026, 9, 5))),
+      repeat: 'weekly',
+      labels: [design],
+    })));
+    const continueWith = (labels) => {
+      const db = as('carol');
+      const batch = writeBatch(db);
+      batch.update(doc(db, 'projects/p1/tasks/t1'), {
+        status: 'complete',
+        completedAt: serverTimestamp(),
+        repeat: null,
+        updatedAt: serverTimestamp(),
+      });
+      batch.set(doc(db, 'projects/p1/tasks/t9'), task({
+        ownerId: 'carol',
+        assigneeId: 'carol',
+        dueDate: Timestamp.fromDate(new Date(Date.UTC(2026, 9, 12))),
+        repeat: 'weekly',
+        repeatedFrom: 't1',
+        labels,
+      }));
+      return batch.commit();
+    };
+    await assertFails(continueWith([{ name: 'Urgent', color: 'red' }]));
+    await assertFails(continueWith([]));
+    await assertSucceeds(continueWith([design]));
+  });
+});
+
 describe('personal tasks', () => {
   test('only the owner can read their tasks', async () => {
     await assertSucceeds(getDoc(doc(as('dave'), 'tasks/personal1')));

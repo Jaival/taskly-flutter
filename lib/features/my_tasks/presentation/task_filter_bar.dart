@@ -7,6 +7,7 @@ import '../../../core/data/file_export.dart';
 import '../../../core/domain/priority.dart';
 import '../../../core/domain/task_status.dart';
 import '../../projects/domain/project.dart';
+import '../../tasks/domain/task_label.dart';
 import '../data/my_tasks_provider.dart';
 import '../domain/my_task.dart';
 import '../domain/task_export.dart';
@@ -18,6 +19,7 @@ class TaskFilterBar extends ConsumerWidget {
   const TaskFilterBar({
     super.key,
     required this.projects,
+    required this.labels,
     required this.shown,
     required this.total,
   });
@@ -25,6 +27,10 @@ class TaskFilterBar extends ConsumerWidget {
   /// The user's projects, to filter by. The Project menu is hidden without
   /// any.
   final List<Project> projects;
+
+  /// The labels on the user's tasks, to filter by. The Label menu is
+  /// hidden without any.
+  final List<TaskLabel> labels;
 
   /// The tasks the filters let through, of how many.
   final List<MyTask> shown;
@@ -38,6 +44,7 @@ class TaskFilterBar extends ConsumerWidget {
     void change(TaskFilter filter) =>
         ref.read(taskFilterProvider.notifier).change(filter);
     final names = {for (final project in projects) project.id: project.name};
+    final labelNames = {for (final label in labels) label.key: label.name};
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -114,6 +121,17 @@ class TaskFilterBar extends ConsumerWidget {
                   selected: filter.projectIds,
                   onChanged: (selected) =>
                       change(filter.copyWith(projectIds: selected)),
+                ),
+              // A label that's gone stays listed while it's ticked, so it
+              // can be unticked.
+              if (labelNames.isNotEmpty || filter.labels.isNotEmpty)
+                _FilterMenu<String>(
+                  label: 'Label',
+                  options: {...labelNames.keys, ...filter.labels}.toList(),
+                  labelOf: (key) => labelNames[key] ?? key,
+                  selected: filter.labels,
+                  onChanged: (selected) =>
+                      change(filter.copyWith(labels: selected)),
                 ),
             ],
           ),

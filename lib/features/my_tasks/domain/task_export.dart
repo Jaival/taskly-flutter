@@ -14,6 +14,7 @@ String tasksToCsv(Iterable<MyTask> items) {
       'Priority',
       'Due date',
       'Project',
+      'Labels',
       'Checklist',
       'Created',
       'Completed',
@@ -26,6 +27,7 @@ String tasksToCsv(Iterable<MyTask> items) {
         task.priority.label,
         _date(task.dueDate),
         project?.name ?? '',
+        [for (final label in task.labels) label.name].join(', '),
         _checklist(task),
         _date(task.createdAt),
         _date(task.completedAt),
@@ -83,7 +85,11 @@ String tasksToICal(Iterable<MyTask> items, {required DateTime now}) {
         'SUMMARY:${_iCalText(task.isComplete ? '✓ ${task.title}' : task.title)}',
         if (task.description.isNotEmpty)
           'DESCRIPTION:${_iCalText(task.description)}',
-        if (project != null) 'CATEGORIES:${_iCalText(project.name)}',
+        // A list, each item escaped on its own: a comma inside a name
+        // mustn't split it in two.
+        if ([?project?.name, for (final label in task.labels) label.name]
+            case final categories when categories.isNotEmpty)
+          'CATEGORIES:${categories.map(_iCalText).join(',')}',
         // Doesn't mark the day as busy.
         'TRANSP:TRANSPARENT',
         'END:VEVENT',

@@ -14,9 +14,11 @@ import '../../auth/data/auth_repository.dart';
 import '../data/task_repository.dart';
 import '../domain/checklist_item.dart';
 import '../domain/task.dart';
+import '../domain/task_label.dart';
 import '../domain/task_repeat.dart';
 import 'checklist_editor.dart';
 import 'due_date_label.dart';
+import 'label_picker.dart';
 import 'repeat_label.dart';
 
 /// Opens the form to edit [task], or to add a task to the project with
@@ -83,6 +85,7 @@ class _TaskFormState extends ConsumerState<TaskForm> {
   };
   late TaskRepeat? _repeat = widget.task?.repeat;
   late List<ChecklistItem> _checklist = widget.task?.checklist ?? const [];
+  late List<TaskLabel> _labels = widget.task?.labels ?? const [];
   // Shows _dueDate; the field is read-only and opens a date picker.
   final _dueText = TextEditingController();
   // Someone who has left the project shows as unassigned.
@@ -94,6 +97,25 @@ class _TaskFormState extends ConsumerState<TaskForm> {
   String? _error;
 
   bool get _isNew => widget.task == null;
+
+  /// The project the task is in, or null for a personal task.
+  String? get _projectId =>
+      widget.task == null ? widget.projectId : widget.task!.projectId;
+
+  /// Changes a label on every task in the same place, then here: the
+  /// task's saved labels change with the rest, and saving the form mustn't
+  /// put the old one back.
+  Future<void> _editLabel(TaskLabel from, TaskLabel? to) async {
+    await ref
+        .read(taskRepositoryProvider)
+        .editLabel(
+          projectId: _projectId,
+          ownerId: ref.read(authRepositoryProvider).currentUser!.uid,
+          from: from,
+          to: to,
+        );
+    if (mounted) setState(() => _labels = replaceLabel(_labels, from, to));
+  }
 
   @override
   void didChangeDependencies() {
@@ -153,6 +175,7 @@ class _TaskFormState extends ConsumerState<TaskForm> {
           checklist: _checklist,
           assigneeId: widget.members == null ? null : () => _assigneeId,
           repeat: () => repeat,
+          labels: _labels,
         );
         if (next != null) showNextTaskAdded(messenger, localizations, next);
       } else {
@@ -166,6 +189,7 @@ class _TaskFormState extends ConsumerState<TaskForm> {
           dueDate: _dueDate,
           repeat: repeat,
           checklist: _checklist,
+          labels: _labels,
         );
       }
       if (mounted) Navigator.pop(context, true);
@@ -299,6 +323,13 @@ class _TaskFormState extends ConsumerState<TaskForm> {
               ),
             ],
             const SizedBox(height: AppSpacing.md),
+            LabelsField(
+              labels: _labels,
+              projectId: _projectId,
+              onChanged: (labels) => setState(() => _labels = labels),
+              onEdit: _editLabel,
+            ),
+            const SizedBox(height: AppSpacing.sm),
             ChecklistEditor(
               initial: _checklist,
               onChanged: (items) => _checklist = items,

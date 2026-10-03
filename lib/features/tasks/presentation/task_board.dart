@@ -12,6 +12,7 @@ import '../data/task_repository.dart';
 import '../domain/task.dart';
 import 'checklist_progress.dart';
 import 'due_date_label.dart';
+import 'label_chip.dart';
 import 'repeat_label.dart';
 import 'task_activity_sheet.dart';
 import 'task_card.dart';
@@ -335,6 +336,14 @@ class BoardCard extends ConsumerWidget {
                   ),
                 ],
               ),
+              if (task.labels.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(
+                    right: AppSpacing.md,
+                    bottom: AppSpacing.sm,
+                  ),
+                  child: TaskLabels(task.labels),
+                ),
               Padding(
                 padding: const EdgeInsets.only(right: AppSpacing.md),
                 child: Wrap(

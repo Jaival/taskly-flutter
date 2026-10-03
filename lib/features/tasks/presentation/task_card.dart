@@ -12,6 +12,7 @@ import '../data/task_repository.dart';
 import '../domain/task.dart';
 import 'checklist_progress.dart';
 import 'due_date_label.dart';
+import 'label_chip.dart';
 import 'repeat_label.dart';
 import 'task_activity_sheet.dart';
 import 'task_form.dart';
@@ -152,6 +153,10 @@ class TaskCard extends ConsumerWidget {
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
+                      ],
+                      if (task.labels.isNotEmpty) ...[
+                        const SizedBox(height: AppSpacing.sm),
+                        TaskLabels(task.labels),
                       ],
                       const SizedBox(height: AppSpacing.sm),
                       Wrap(

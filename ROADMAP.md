@@ -208,7 +208,7 @@ Legacy: `Screens/LandingPage.dart`, `Widgets/LandingPage/*`, `Widgets/NavBar/*`,
 - "Contact us" was an empty placeholder page in v1 and wasn't brought back.
 
 ### Applies to every feature
-- [x] No hard-coded colours or font sizes; everything comes from the theme. The only colour literals are the brand seed and the priority palette, both in `app/theme/`.
+- [x] No hard-coded colours or font sizes; everything comes from the theme. The only colour literals are the brand seed and the priority and label palettes, all in `app/theme/`.
 - [x] Loading (skeleton), empty and error states on every list.
 - [x] Accessibility: semantic labels, sufficient contrast (the old white-on-pastel text failed), keyboard navigation and focus order, text that scales.
   - `test/app/accessibility_test.dart` runs Flutter's contrast, tap-target and label guidelines on every main page in light and dark mode, checks nothing overflows with text at 200%, and logs in and ticks off a task with only the keyboard.
@@ -313,7 +313,14 @@ Tier A is what makes this feel like a real product. The rest is optional.
   - Viewers can tick off a repeating task assigned to them, and the next one is added for them too. The rules allow that only as an exact copy of the task they completed, in the same write (devops.md 11, "Recurring tasks").
   - Not there: stopping at an end date, "every weekday" or "every 2 weeks", and removing the next one when you untick a task by mistake (delete it).
   - Tried on the Android emulator against the Firebase emulators, as a viewer: the next task was stored with the rules on.
-- [ ] **Labels/tags** with colours.
+- [x] **Labels/tags** with colours.
+  - A Labels section in the task form: pick labels already in use, or type a new name and pick one of nine colours (a new label starts in a colour not used yet). At most 10 per task, 30 characters each. Cards and board cards show them as a coloured dot on a tint of the colour, with the usual text colour, so every colour is as easy to read in light and dark mode.
+  - The labels of a project are the ones its tasks use; personal tasks share another set. The same name, ignoring case, is the same label. There's no separate list of labels: a label lasts as long as a task has it.
+  - The pencil beside a label in the picker renames or recolours it, or deletes it, on every task in the project (or all your personal tasks). Renaming one to another's name merges the two.
+  - The Tasks page has a Label filter (by name, so "Design" in two projects is one choice), search finds labels too, and exports include them: a Labels column in the spreadsheet, and categories in the calendar file.
+  - Changing a task's labels is in its activity log. Viewers can't change labels, as with every field but the status. The next task in a series keeps the labels, and the rules check it does (devops.md 11, "Labels").
+  - Not there: filtering by label on a project's page, and choosing your own colours.
+  - Tried on the Android emulator against the Firebase emulators, as a project owner: added a label, renamed and recoloured another across both tasks, and the changes and their activity entry were stored with the rules on.
 - [ ] **AI assist:** "break this task into subtasks" or natural-language quick add ("Finish report by Friday high priority"), via a Cloud Function calling an LLM API. Keep API keys server-side.
 - [x] **Export** to CSV or iCal.
   - The download button beside the search box on the Tasks page saves the tasks on the page, so the search and filters decide what's in the file. In a browser it downloads; on a phone it opens the share sheet, to save the file or send it.

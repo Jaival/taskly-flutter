@@ -330,6 +330,18 @@ void main() {
       );
     });
 
+    test('lists the labels', () {
+      expect(
+        describe(ActivityKind.labels, 'Design'),
+        'Alex set the label to Design',
+      );
+      expect(
+        describe(ActivityKind.labels, 'Design\nWaiting, still'),
+        'Alex set the labels to Design, Waiting, still',
+      );
+      expect(describe(ActivityKind.labels, ''), 'Alex removed the labels');
+    });
+
     test('says how long ago', () {
       String ago(Duration since) =>
           timeAgo(localizations, now.subtract(since), now);

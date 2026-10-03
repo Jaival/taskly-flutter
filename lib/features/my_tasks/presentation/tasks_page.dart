@@ -9,6 +9,7 @@ import '../../auth/data/auth_repository.dart';
 import '../../projects/data/project_repository.dart';
 import '../../tasks/data/task_repository.dart';
 import '../../tasks/domain/due_date.dart';
+import '../../tasks/domain/task_label.dart';
 import '../../tasks/presentation/task_card.dart';
 import '../../tasks/presentation/task_form.dart';
 import '../data/my_tasks_provider.dart';
@@ -109,6 +110,7 @@ class _FilteredTasks extends ConsumerWidget {
             ),
             child: TaskFilterBar(
               projects: projects,
+              labels: labelsInUse([for (final item in items) item.task.labels]),
               shown: shown,
               total: items.length,
             ),

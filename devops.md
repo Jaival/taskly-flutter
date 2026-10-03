@@ -889,6 +889,12 @@ A task also has **`completedAt`**, a server timestamp like `updatedAt`, set when
 
 A task's **checklist** is a list of `{text, done}` maps in the task document itself, not a subcollection. It's small, it's only ever shown with its task, and one document means one read, one listener and no extra rules. The costs: the whole list is rewritten on every change (two people editing the same checklist at once: the last save wins), and a document can't grow past 1 MB, so the rules cap the list at 50 items. Something that grows without limit or is queried on its own belongs in a subcollection, which is where a task's comments are.
 
+### Labels
+
+A task's **labels** are another list inside it: `{name, color}` maps, the colour by name (`blue`), so the theme decides the shade ([`label_colors.dart`](lib/app/theme/label_colors.dart)). There's no `labels` collection. The labels of a project are simply the ones its tasks use (`labelsInUse` in [`task_label.dart`](lib/features/tasks/domain/task_label.dart)), and two with the same name, ignoring case, are the same label.
+
+That keeps a task readable in one read, works the same for personal tasks, and needs no rules beyond "a list of at most 10". The cost is renaming: a label's name and colour are copied onto every task that has it, so renaming, recolouring or deleting one rewrites all those tasks (`editLabel` in [`task_repository.dart`](lib/features/tasks/data/task_repository.dart)), in batches of 500. That's fine for a project's worth of tasks; a team with tens of thousands would want a label collection and IDs on the tasks instead.
+
 ### Recurring tasks
 
 A repeating task isn't one task with a list of dates. Each time is its own task document, and completing one adds the next (`setStatus` and `updateDetails` in [`task_repository.dart`](lib/features/tasks/data/task_repository.dart)). That way everything else keeps working without knowing about repetition: the next one has its own comments, checklist, status and due date, and lists, the calendar, stats and export see ordinary tasks. The date logic is in [`task_repeat.dart`](lib/features/tasks/domain/task_repeat.dart).
@@ -897,7 +903,7 @@ Three things make it safe:
 
 - **One batch.** The completion and the new task are written together, or neither is.
 - **The schedule moves.** The batch takes `repeat` off the completed task and puts it on the new one. Unticking and ticking the old task again adds nothing, and two devices completing it at once can't both start a new series from it.
-- **Viewers.** A viewer can't normally create tasks. The rules make one exception, `isNextInSeries` in [`firestore.rules`](firestore.rules): a new task with `repeatedFrom` pointing at a task that was assigned to them and repeating before this write (`get`), and is complete without a schedule after it (`getAfter`). The new task must be a copy of it, still assigned to them and not started. The rules can't compare checklists item by item, so only the number of items has to match.
+- **Viewers.** A viewer can't normally create tasks. The rules make one exception, `isNextInSeries` in [`firestore.rules`](firestore.rules): a new task with `repeatedFrom` pointing at a task that was assigned to them and repeating before this write (`get`), and is complete without a schedule after it (`getAfter`). The new task must be a copy of it, still assigned to them and not started. The rules can't compare checklists item by item, so only the number of items has to match. Labels are compared whole (`==` works on lists), so they must be the same.
 
 `repeatedFrom` is written only for that check; the app never reads it.
 

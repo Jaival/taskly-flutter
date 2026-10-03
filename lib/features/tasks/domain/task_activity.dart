@@ -12,7 +12,8 @@ enum ActivityKind {
   status,
   priority,
   assignee,
-  dueDate;
+  dueDate,
+  labels;
 
   /// Null for a kind this version of the app doesn't know, written by a
   /// newer one. Those entries are skipped rather than shown wrongly.
@@ -47,7 +48,7 @@ class TaskActivity {
 
   /// The comment's text, or what the field changed to: a status or priority
   /// by name, the assignee's user ID, the due date as `2026-10-03`, the new
-  /// title. Empty when the field was cleared, and for kinds with nothing
+  /// title, the labels' names a line each. Empty when the field was cleared, and for kinds with nothing
   /// more to say.
   final String value;
 
