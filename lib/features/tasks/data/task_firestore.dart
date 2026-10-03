@@ -28,11 +28,9 @@ Task taskFromFirestore(
   SnapshotOptions? _,
 ) {
   final data = snapshot.data() ?? const {};
-  // projects/{projectId}/tasks/{id} has a grandparent; tasks/{id} doesn't.
-  final project = snapshot.reference.parent.parent;
   return Task(
     id: snapshot.id,
-    projectId: project?.id,
+    projectId: projectIdFromTaskPath(snapshot.reference.path),
     ownerId: data.string('ownerId'),
     title: data.string('title'),
     description: data.string('description'),
@@ -50,6 +48,17 @@ Task taskFromFirestore(
     completedAt: data.dateTime('completedAt'),
   );
 }
+
+/// The project a task is in, from its path: `projects/{projectId}/tasks/{id}`,
+/// or null for a personal task at `tasks/{id}`.
+///
+/// From the path rather than `reference.parent.parent`: on the web, asking
+/// a top-level collection for its parent throws inside the Firestore
+/// plugin, and personal tasks would never load.
+String? projectIdFromTaskPath(String path) => switch (path.split('/')) {
+  ['projects', final projectId, 'tasks', _] => projectId,
+  _ => null,
+};
 
 /// `projectId` isn't written: it comes from the path, so it can't disagree
 /// with where the task actually lives.

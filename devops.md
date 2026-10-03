@@ -507,7 +507,7 @@ A key press goes to the widget that has the **focus**, then up through its paren
 
 There are two test suites:
 
-- **Dart tests** (`test/`, 283 tests): run with `flutter test`. Takes a few seconds.
+- **Dart tests** (`test/`, 284 tests): run with `flutter test`. Takes a few seconds.
 - **Security rules tests** (`rules_test/`, 53 tests): run with `npm test` inside `rules_test/`. This starts the Firestore emulator, runs the tests, and stops it. If the emulators are already running (you'd get "port taken"), use them instead: `FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npm run test:only`. The tests load `firestore.rules` fresh each run. See [section 11](#11-firestore-primer-read-before-phase-2).
 
 ### The testing pyramid
@@ -843,6 +843,7 @@ Always run the rules tests first. The Firebase console also has a "Rules Playgro
 | `firebase-tools no longer supports Java version before 21` | Default `JAVA_HOME` is JDK 17 | Point `JAVA_HOME` at Android Studio's `jbr` folder for that terminal (section 11) |
 | Android build: `Could not close incremental caches … compileDebugKotlin` | Kotlin's incremental cache can't handle the project (`D:`) and pub cache (`C:`) being on different drives | Already fixed: `kotlin.incremental=false` in `android/gradle.properties` |
 | `Could not start Firestore Emulator, port taken` | An earlier emulator is still running (closing the terminal window doesn't always stop the Java process) | Stop emulators with Ctrl+C. Otherwise find the process with `netstat -ano \| findstr :8080` and end it in Task Manager |
+| "Couldn't load your tasks." in a browser but not on a phone; the console says `Expandos are not allowed on … null` | On the web, asking a top-level collection for its `parent` throws inside the Firestore plugin (cloud_firestore_web 5.7), where other platforms return null | Already fixed: a task's project comes from its path (`projectIdFromTaskPath`), not from `reference.parent.parent`. Don't call `.parent` on a collection that might be top-level |
 | App on the emulator can't reach the Firebase emulators | Emulators not running, or the app was started without the flag | Start them first; run with `--dart-define=USE_FIREBASE_EMULATORS=true` |
 
 ---

@@ -125,4 +125,12 @@ void main() {
     final old = (await personalTasksCollection(db).doc('t2').get()).data()!;
     expect(old.completedAt, isNull);
   });
+
+  test('the project comes from the path, without asking for parents', () {
+    expect(projectIdFromTaskPath('projects/p1/tasks/t1'), 'p1');
+    expect(projectIdFromTaskPath('tasks/t1'), isNull);
+    // Not a task at all.
+    expect(projectIdFromTaskPath('projects/p1'), isNull);
+    expect(projectIdFromTaskPath('users/u1/tasks/t1'), isNull);
+  });
 }
