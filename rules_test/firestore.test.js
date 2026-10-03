@@ -83,6 +83,17 @@ const task = (overrides = {}) => ({
   ...overrides,
 });
 
+const activityPath = 'projects/p1/tasks/t1/activity';
+
+const entry = (overrides = {}) => ({
+  kind: 'comment',
+  authorId: 'carol',
+  authorName: 'Carol',
+  value: 'Looks good',
+  createdAt: serverTimestamp(),
+  ...overrides,
+});
+
 const erinInviteId = 'p1_erin@example.com';
 
 const invite = (overrides = {}) => ({
@@ -422,6 +433,101 @@ describe('project tasks', () => {
   test('editors can delete tasks, viewers cannot', async () => {
     await assertFails(deleteDoc(doc(as('carol'), 'projects/p1/tasks/t1')));
     await assertSucceeds(deleteDoc(doc(as('bob'), 'projects/p1/tasks/t1')));
+  });
+});
+
+describe('comments and activity', () => {
+  beforeEach(() => seed(async (db) => {
+    await setDoc(doc(db, `${activityPath}/carols`), entry());
+    await setDoc(doc(db, `${activityPath}/bobs`), entry({ authorId: 'bob', authorName: 'Bob' }));
+    await setDoc(doc(db, `${activityPath}/moved`), entry({ kind: 'status', value: 'inProgress' }));
+  }));
+
+  test('members can read them, others cannot', async () => {
+    const latest = (db) => query(collection(db, activityPath), orderBy('createdAt'));
+    await assertSucceeds(getDocs(latest(as('carol'))));
+    await assertFails(getDocs(latest(as('dave'))));
+    await assertFails(getDocs(latest(signedOut())));
+  });
+
+  test('every member can comment, viewers included, but not outsiders', async () => {
+    await assertSucceeds(setDoc(doc(as('carol'), `${activityPath}/new1`), entry()));
+    await assertSucceeds(setDoc(doc(as('bob'), `${activityPath}/new2`), entry({ authorId: 'bob' })));
+    await assertFails(setDoc(doc(as('dave'), `${activityPath}/new3`), entry({ authorId: 'dave' })));
+  });
+
+  test('an entry is in your own name, stamped by the server, and well formed', async () => {
+    const add = (overrides) => setDoc(doc(as('carol'), `${activityPath}/new`), entry(overrides));
+    await assertFails(add({ authorId: 'alice' }));
+    await assertFails(add({ createdAt: Timestamp.fromMillis(0) }));
+    await assertFails(add({ value: '' }));
+    await assertFails(add({ value: 'x'.repeat(2001) }));
+    await assertFails(add({ authorName: 'x'.repeat(101) }));
+    await assertFails(add({ kind: 'reaction' }));
+    await assertFails(add({ pinned: true }));
+    await assertSucceeds(add({ value: 'x'.repeat(2000) }));
+  });
+
+  test('a viewer can log a status change and nothing else; an editor any change', async () => {
+    const carol = as('carol');
+    await assertSucceeds(setDoc(doc(carol, `${activityPath}/a`), entry({ kind: 'status', value: 'complete' })));
+    await assertFails(setDoc(doc(carol, `${activityPath}/b`), entry({ kind: 'title', value: 'Renamed' })));
+    await assertFails(setDoc(doc(carol, `${activityPath}/c`), entry({ kind: 'created', value: '' })));
+    await assertSucceeds(setDoc(doc(as('bob'), `${activityPath}/d`), entry({ kind: 'title', authorId: 'bob', value: 'Renamed' })));
+  });
+
+  test("the app's writes: a change and its entry in one batch", async () => {
+    // An editor creating a task.
+    const bob = as('bob');
+    const created = writeBatch(bob);
+    created.set(doc(bob, 'projects/p1/tasks/t9'), task({ ownerId: 'bob' }));
+    created.set(doc(bob, 'projects/p1/tasks/t9/activity/e1'), entry({ kind: 'created', authorId: 'bob', value: '' }));
+    await assertSucceeds(created.commit());
+
+    // A viewer ticking off the task assigned to them.
+    const carol = as('carol');
+    const done = writeBatch(carol);
+    done.update(doc(carol, 'projects/p1/tasks/t1'), {
+      status: 'complete',
+      completedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    done.set(doc(carol, `${activityPath}/e2`), entry({ kind: 'status', value: 'complete' }));
+    await assertSucceeds(done.commit());
+  });
+
+  test('no entries under a task that does not exist', async () => {
+    await assertFails(setDoc(doc(as('bob'), 'projects/p1/tasks/nope/activity/e1'), entry({ authorId: 'bob' })));
+  });
+
+  test('entries are never edited, even by their author or the owner', async () => {
+    await assertFails(updateDoc(doc(as('carol'), `${activityPath}/carols`), { value: 'Changed my mind' }));
+    await assertFails(updateDoc(doc(as('alice'), `${activityPath}/carols`), { value: 'Rewritten' }));
+  });
+
+  test("a viewer can delete their own comment, but not other people's or the log", async () => {
+    const carol = as('carol');
+    await assertFails(deleteDoc(doc(carol, `${activityPath}/bobs`)));
+    await assertFails(deleteDoc(doc(carol, `${activityPath}/moved`)));
+    await assertSucceeds(deleteDoc(doc(carol, `${activityPath}/carols`)));
+    await assertFails(deleteDoc(doc(as('dave'), `${activityPath}/bobs`)));
+  });
+
+  test("editors can delete anyone's comment, and a task together with its entries", async () => {
+    const bob = as('bob');
+    await assertSucceeds(deleteDoc(doc(bob, `${activityPath}/carols`)));
+
+    const batch = writeBatch(bob);
+    batch.delete(doc(bob, `${activityPath}/bobs`));
+    batch.delete(doc(bob, `${activityPath}/moved`));
+    batch.delete(doc(bob, 'projects/p1/tasks/t1'));
+    await assertSucceeds(batch.commit());
+  });
+
+  test('personal tasks have none', async () => {
+    const dave = as('dave');
+    await assertFails(setDoc(doc(dave, 'tasks/personal1/activity/e1'), entry({ authorId: 'dave' })));
+    await assertFails(getDocs(collection(dave, 'tasks/personal1/activity')));
   });
 });
 

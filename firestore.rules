@@ -275,6 +275,49 @@ service cloud.firestore {
             );
 
         allow delete: if isAlreadyDeleted() || canEditProject();
+
+        // ---------------------------------------- comments and activity
+
+        // Comments on a task, and a log of the changes to it ("Alex moved
+        // this to In progress"). Entries are never edited.
+        //
+        // The rules can't tell whether a logged change really happened (the
+        // app writes the change and its entry in one batch). What they do
+        // guarantee is who wrote it: nobody can write in someone else's name.
+        match /activity/{entryId} {
+          function isValidEntry(data) {
+            return data.keys().hasOnly(
+                     ['kind', 'authorId', 'authorName', 'value', 'createdAt'])
+                && data.kind in ['comment', 'created', 'title', 'description',
+                     'status', 'priority', 'assignee', 'dueDate']
+                && data.authorId == uid()
+                && data.authorName is string && data.authorName.size() <= 100
+                && data.value is string && data.value.size() <= 2000
+                && (data.kind != 'comment' || data.value.size() > 0)
+                && data.createdAt == request.time;
+          }
+
+          allow read: if isProjectMember();
+
+          // Every member can comment. Besides that, a viewer can only log
+          // the one change a viewer can make: a task's status. The task must
+          // exist once the write is done, so entries can't pile up under
+          // tasks that were deleted or never created.
+          allow create: if isProjectMember()
+              && isValidEntry(incoming())
+              && (incoming().kind in ['comment', 'status'] || canEditProject())
+              && existsAfter(/databases/$(database)/documents/projects/$(projectId)/tasks/$(taskId));
+
+          allow update: if false;
+
+          // Your own comment; or, as an editor, anything, which is also how
+          // a task's entries are deleted along with it.
+          allow delete: if isAlreadyDeleted()
+              || canEditProject()
+              || (isProjectMember()
+                  && resource.data.kind == 'comment'
+                  && resource.data.authorId == uid());
+        }
       }
     }
 

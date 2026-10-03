@@ -110,6 +110,8 @@ projects/{projectId}             ownerId, memberIds[], roles{uid: role}, name, d
                                  priority, status, createdAt, updatedAt
 projects/{projectId}/tasks/{id}  ownerId, title, description, priority, status, assigneeId,
                                  dueDate, order, createdAt, updatedAt
+projects/…/tasks/{id}/activity/{id}   comments and changes: kind, authorId, authorName, value,
+                                 createdAt (added in Phase 4)
 tasks/{taskId}                   personal tasks: ownerId, plus the same fields as project tasks
 invites/{projectId}_{email}      projectId, projectName, email, role, invitedBy, status, createdAt
 ```
@@ -264,7 +266,12 @@ Tier A is what makes this feel like a real product. The rest is optional.
     - **To do in the console before it works:** enable the Google provider and check the authorised domains (devops.md 7). Until then the button says that way of signing in isn't enabled. The flow is covered by tests against a fake, but has not been tried against real Google yet.
     - Someone who signs in with Google has no password, so the Profile page says "Signed in with Google" instead of "Change password", and deleting the account asks them to sign in with Google again rather than for a password.
     - Not on Android or iOS yet: that needs the `google_sign_in` package and per-app setup in the console, so the button isn't shown there. The button has no Google logo.
-- [ ] **Comments and an activity log** on tasks ("Alex moved this to In Progress").
+- [x] **Comments and an activity log** on tasks ("Alex moved this to In Progress").
+  - A speech-bubble button on every project task (and "Comments and activity" in a board card's menu) opens the task's comments and its history in one list, oldest first, with a box to add a comment. Enter sends.
+  - Everyone in the project can comment, viewers included. You can delete your own comments; owners and editors can delete anyone's. Comments can't be edited.
+  - The log records who created the task, and each change to its title, description, status, priority, assignee and due date. Ticking checklist items isn't logged.
+  - Each entry is written together with the change it describes, so the two can't disagree, and keeps its author's name, so it still reads properly after they leave the project or delete their account (devops.md 11).
+  - Personal tasks have neither: there's nobody else to tell. Tasks made before this start with an empty history. The list shows the latest 100 entries, and cards don't show how many comments a task has.
 - [ ] **Avatar upload** via Firebase Storage.
 
 ### Tier C: platform

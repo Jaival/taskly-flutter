@@ -91,7 +91,8 @@ class ProjectRepository {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-  /// Deletes the project, all of its tasks and the invites to it.
+  /// Deletes the project, all of its tasks (with their comments and
+  /// activity) and the invites to it.
   ///
   /// Firestore doesn't delete subcollections with their parent, so the tasks
   /// are fetched once and deleted in batches first. (v1 used a live listener
@@ -104,15 +105,22 @@ class ProjectRepository {
     );
     final projectDoc = _db.collection('projects').doc(id);
     final tasks = await projectDoc.collection('tasks').get();
+    final activity = await Future.wait([
+      for (final task in tasks.docs)
+        task.reference.collection('activity').get(),
+    ]);
+    final documents = [
+      for (final entries in activity)
+        for (final entry in entries.docs) entry.reference,
+      for (final task in tasks.docs) task.reference,
+    ];
 
-    for (var i = 0; i < tasks.docs.length; i += _maxBatchWrites) {
+    for (var i = 0; i < documents.length; i += _maxBatchWrites) {
       final batch = _db.batch();
-      for (final task in tasks.docs.skip(i).take(_maxBatchWrites)) {
-        batch.delete(task.reference);
-      }
+      documents.skip(i).take(_maxBatchWrites).forEach(batch.delete);
       await batch.commit();
     }
-    // Last, so the task deletes above can still check membership.
+    // Last, so the deletes above can still check membership.
     await projectDoc.delete();
   }
 }

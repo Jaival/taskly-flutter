@@ -6,19 +6,35 @@ import '../../../core/data/firestore_provider.dart';
 import '../../../core/domain/priority.dart';
 import '../../../core/domain/task_status.dart';
 import '../../auth/data/auth_repository.dart';
+import '../../auth/domain/app_user.dart';
 import '../domain/checklist_item.dart';
 import '../domain/task.dart';
+import '../domain/task_activity.dart';
+import 'task_activity_firestore.dart';
 import 'task_firestore.dart';
 
 class TaskRepository {
-  TaskRepository(this._db, {DateTime Function()? clock})
-    : _clock = clock ?? DateTime.now;
+  TaskRepository(
+    this._db, {
+    DateTime Function()? clock,
+    AppUser? Function()? currentUser,
+  }) : _clock = clock ?? DateTime.now,
+       _currentUser = currentUser ?? _nobody;
 
   final FirebaseFirestore _db;
   final DateTime Function() _clock;
 
+  /// Who is making the changes, for the activity log. Without one, nothing
+  /// is logged.
+  final AppUser? Function() _currentUser;
+
+  static AppUser? _nobody() => null;
+
   /// Firestore allows at most 500 writes per batch.
   static const _maxBatchWrites = 500;
+
+  /// How many of a task's latest comments and changes are shown.
+  static const _activityLimit = 100;
 
   /// Personal tasks when [projectId] is null, otherwise the project's.
   CollectionReference<Task> _collection(String? projectId) => projectId == null
@@ -62,22 +78,26 @@ class TaskRepository {
     List<ChecklistItem> checklist = const [],
   }) async {
     final doc = _collection(projectId).doc();
-    await doc.set(
-      Task(
-        id: doc.id,
-        projectId: projectId,
-        ownerId: ownerId,
-        title: title.trim(),
-        description: description.trim(),
-        priority: priority,
-        assigneeId: assigneeId,
-        dueDate: dueDate,
-        checklist: _tidy(checklist),
-        // Later tasks sort after earlier ones, without reading the list to
-        // find the current last position.
-        order: _clock().millisecondsSinceEpoch.toDouble(),
-      ),
-    );
+    final batch = _db.batch()
+      ..set(
+        doc,
+        Task(
+          id: doc.id,
+          projectId: projectId,
+          ownerId: ownerId,
+          title: title.trim(),
+          description: description.trim(),
+          priority: priority,
+          assigneeId: assigneeId,
+          dueDate: dueDate,
+          checklist: _tidy(checklist),
+          // Later tasks sort after earlier ones, without reading the list to
+          // find the current last position.
+          order: _clock().millisecondsSinceEpoch.toDouble(),
+        ),
+      );
+    _log(batch, projectId, doc.id, {ActivityKind.created: ''});
+    await batch.commit();
     return doc.id;
   }
 
@@ -92,29 +112,70 @@ class TaskRepository {
     required DateTime? dueDate,
     List<ChecklistItem>? checklist,
     ValueGetter<String?>? assigneeId,
-  }) => _doc(task).update({
-    'title': title.trim(),
-    'description': description.trim(),
-    'priority': priority.name,
-    'status': status.name,
-    ..._completedAt(task, status),
-    'dueDate': dueDateToFirestore(dueDate),
-    if (checklist != null) 'checklist': checklistToFirestore(_tidy(checklist)),
-    // Only when given: personal tasks have no assignee field in the form.
-    // `() => null` unassigns.
-    if (assigneeId != null) 'assigneeId': assigneeId(),
-    'updatedAt': FieldValue.serverTimestamp(),
-  });
+  }) {
+    final newTitle = title.trim();
+    final newDescription = description.trim();
+    final batch = _db.batch()
+      ..update(_doc(task), {
+        'title': newTitle,
+        'description': newDescription,
+        'priority': priority.name,
+        'status': status.name,
+        ..._completedAt(task, status),
+        'dueDate': dueDateToFirestore(dueDate),
+        if (checklist != null)
+          'checklist': checklistToFirestore(_tidy(checklist)),
+        // Only when given: personal tasks have no assignee field in the
+        // form. `() => null` unassigns.
+        if (assigneeId != null) 'assigneeId': assigneeId(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    final newDue = dueDateActivityValue(dueDate);
+    _log(batch, task.projectId, task.id, {
+      if (newTitle != task.title) ActivityKind.title: newTitle,
+      if (newDescription != task.description) ActivityKind.description: '',
+      if (status != task.status) ActivityKind.status: status.name,
+      if (priority != task.priority) ActivityKind.priority: priority.name,
+      if (assigneeId case final assignee? when assignee() != task.assigneeId)
+        ActivityKind.assignee: assignee() ?? '',
+      if (newDue != dueDateActivityValue(task.dueDate))
+        ActivityKind.dueDate: newDue,
+    });
+    return batch.commit();
+  }
 
   /// Changes only the status. The rules let viewers do this, but nothing
   /// else, on tasks assigned to them.
-  Future<void> setStatus(Task task, TaskStatus status) => _doc(task).update({
-    'status': status.name,
-    ..._completedAt(task, status),
-    'updatedAt': FieldValue.serverTimestamp(),
-  });
+  Future<void> setStatus(Task task, TaskStatus status) {
+    final batch = _db.batch()
+      ..update(_doc(task), {
+        'status': status.name,
+        ..._completedAt(task, status),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    if (status != task.status) {
+      _log(batch, task.projectId, task.id, {ActivityKind.status: status.name});
+    }
+    return batch.commit();
+  }
 
-  Future<void> deleteTask(Task task) => _doc(task).delete();
+  /// Deletes the task, and its comments and activity with it: Firestore
+  /// doesn't delete a subcollection with its parent.
+  Future<void> deleteTask(Task task) async {
+    final activity = switch (task.projectId) {
+      null => null,
+      final projectId => await taskActivityCollection(
+        _db,
+        projectId,
+        task.id,
+      ).get(),
+    };
+    await _deleteAll([
+      if (activity != null)
+        for (final entry in activity.docs) entry.reference,
+      _doc(task),
+    ]);
+  }
 
   /// Deletes all of [uid]'s personal tasks, when their account is deleted.
   Future<void> deletePersonalTasks(String uid) async {
@@ -122,12 +183,71 @@ class TaskRepository {
         .collection('tasks')
         .where('ownerId', isEqualTo: uid)
         .get();
-    for (var i = 0; i < tasks.docs.length; i += _maxBatchWrites) {
+    await _deleteAll([for (final task in tasks.docs) task.reference]);
+  }
+
+  Future<void> _deleteAll(List<DocumentReference<Object?>> documents) async {
+    for (var i = 0; i < documents.length; i += _maxBatchWrites) {
       final batch = _db.batch();
-      for (final task in tasks.docs.skip(i).take(_maxBatchWrites)) {
-        batch.delete(task.reference);
-      }
+      documents.skip(i).take(_maxBatchWrites).forEach(batch.delete);
       await batch.commit();
+    }
+  }
+
+  /// The latest comments and changes on a project task, oldest first.
+  Stream<List<TaskActivity>> watchActivity(String projectId, String taskId) =>
+      taskActivityCollection(_db, projectId, taskId)
+          .orderBy('createdAt')
+          .limitToLast(_activityLimit)
+          .snapshots()
+          .map(
+            (snapshot) => [
+              for (final doc in snapshot.docs) ?activityFromFirestore(doc),
+            ],
+          );
+
+  /// Adds a comment to a project task. Any member may, viewers included.
+  Future<void> addComment(Task task, String text) async {
+    final (projectId, author) = (task.projectId, _currentUser());
+    if (projectId == null || author == null) return;
+    await taskActivityCollection(_db, projectId, task.id).add(
+      newActivityToFirestore(
+        kind: ActivityKind.comment,
+        author: author,
+        value: text.trim(),
+      ),
+    );
+  }
+
+  /// Deletes a comment. The rules let its author, and the project's owner
+  /// and editors.
+  Future<void> deleteComment(Task task, TaskActivity comment) async {
+    final projectId = task.projectId;
+    if (projectId == null) return;
+    await taskActivityCollection(
+      _db,
+      projectId,
+      task.id,
+    ).doc(comment.id).delete();
+  }
+
+  /// Records [changes] (what changed, and to what) in the task's activity
+  /// log, in the same [batch] as the change itself, so the log can't say
+  /// something that didn't happen. Only project tasks have a log.
+  void _log(
+    WriteBatch batch,
+    String? projectId,
+    String taskId,
+    Map<ActivityKind, String> changes,
+  ) {
+    final author = _currentUser();
+    if (projectId == null || author == null) return;
+    final activity = taskActivityCollection(_db, projectId, taskId);
+    for (final MapEntry(key: kind, :value) in changes.entries) {
+      batch.set(
+        activity.doc(),
+        newActivityToFirestore(kind: kind, author: author, value: value),
+      );
     }
   }
 
@@ -150,7 +270,11 @@ class TaskRepository {
 }
 
 final taskRepositoryProvider = Provider<TaskRepository>(
-  (ref) => TaskRepository(ref.watch(firestoreProvider)),
+  (ref) => TaskRepository(
+    ref.watch(firestoreProvider),
+    // Read when a change is made, not now: the repository outlives sign-ins.
+    currentUser: () => ref.read(authRepositoryProvider).currentUser,
+  ),
 );
 
 /// The signed-in user's personal tasks.
@@ -184,4 +308,19 @@ final assignedTasksProvider = StreamProvider.autoDispose
       return ref
           .watch(taskRepositoryProvider)
           .watchAssignedTasks(projectId, uid);
+    });
+
+/// A project task, by where it lives.
+typedef ProjectTaskRef = ({String projectId, String taskId});
+
+/// The comments and changes on a project task, oldest first.
+///
+/// `autoDispose` and restarted when the user changes, like
+/// [projectTasksProvider].
+final taskActivityProvider = StreamProvider.autoDispose
+    .family<List<TaskActivity>, ProjectTaskRef>((ref, task) {
+      ref.watch(authStateProvider.select((user) => user.value?.uid));
+      return ref
+          .watch(taskRepositoryProvider)
+          .watchActivity(task.projectId, task.taskId);
     });

@@ -507,8 +507,8 @@ A key press goes to the widget that has the **focus**, then up through its paren
 
 There are two test suites:
 
-- **Dart tests** (`test/`, 296 tests): run with `flutter test`. Takes a few seconds.
-- **Security rules tests** (`rules_test/`, 53 tests): run with `npm test` inside `rules_test/`. This starts the Firestore emulator, runs the tests, and stops it. If the emulators are already running (you'd get "port taken"), use them instead: `FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npm run test:only`. The tests load `firestore.rules` fresh each run. See [section 11](#11-firestore-primer-read-before-phase-2).
+- **Dart tests** (`test/`, 324 tests): run with `flutter test`. Takes a few seconds.
+- **Security rules tests** (`rules_test/`, 63 tests): run with `npm test` inside `rules_test/`. This starts the Firestore emulator, runs the tests, and stops it. If the emulators are already running (you'd get "port taken"), use them instead: `FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npm run test:only`. The tests load `firestore.rules` fresh each run. See [section 11](#11-firestore-primer-read-before-phase-2).
 
 ### The testing pyramid
 
@@ -638,7 +638,7 @@ Someone who signs in with Google has no Taskly password. `AppUser.hasPassword` i
  └──────────────────────────┬──────────────────────────────┘
  ┌──────────────── job: rules (runs in parallel) ──────────┐
  │ Java 21 + Node 24 → npm ci → npm test                   │
- │ (Firestore emulator + 53 security rules tests)          │
+ │ (Firestore emulator + 63 security rules tests)          │
  └──────────────────────────┬──────────────────────────────┘
                             │ only if BOTH passed AND branch is main
                             ▼
@@ -756,6 +756,23 @@ A third surprise, found by testing on a device: **writes can arrive twice.** If 
 
 Deleting `projects/abc` does **not** delete `projects/abc/tasks/*`. The orphaned tasks stay, invisible but still stored. `ProjectRepository.deleteProject()` fetches the tasks once and deletes them in batches of up to 500 (Firestore's limit per batch), then deletes the project. The order matters: the rules check the parent project to decide who may delete a task, so once the project is gone nobody can. A Cloud Function could do this on the server instead, but that needs the paid plan.
 
+The same goes one level down: a task's comments live in `projects/abc/tasks/t1/activity/*`, so `TaskRepository.deleteTask()` deletes those with the task, and `deleteProject()` collects them for every task.
+
+### Writing two documents together
+
+A project task has an **activity log**: one small document per comment or change, in the task's `activity` subcollection. "Alex moved this to In progress" is only worth showing if it's true, so the repository never writes the change and its log entry separately. Both go in one `WriteBatch`, which Firestore applies completely or not at all (offline too: the batch waits and is sent as one).
+
+```dart
+final batch = _db.batch()
+  ..update(_doc(task), {'status': status.name, ...});
+_log(batch, task.projectId, task.id, {ActivityKind.status: status.name});
+return batch.commit();
+```
+
+The rules see the batch as a whole. `existsAfter(...)` asks "will this document exist once the batch is done?", which is how an entry is refused for a task that doesn't exist, yet allowed in the very batch that creates the task. What the rules *can't* check is that a logged change matches what really changed, so they guarantee less: an entry is always in the caller's own name, with the server's time, and is never edited afterwards.
+
+Each entry stores its author's name next to their ID. That's **denormalising**: copying data to where it's read, instead of looking it up. The cost is that renaming yourself doesn't rename your old comments. The gain is one read instead of one per author, and a name that survives the author leaving the project or deleting their account.
+
 ### Real-time listeners
 
 `.snapshots()` returns a `Stream` that emits every time the result changes, on any device. A `StreamProvider` turns it into an `AsyncValue`, and Riverpod cancels the subscription when nobody's watching any more. v1 attached listeners by hand and never cancelled them (the roadmap's "endless delete listener" bug).
@@ -772,7 +789,7 @@ A task also has **`completedAt`**, a server timestamp like `updatedAt`, set when
 
 ### Lists inside a document
 
-A task's **checklist** is a list of `{text, done}` maps in the task document itself, not a subcollection. It's small, it's only ever shown with its task, and one document means one read, one listener and no extra rules. The costs: the whole list is rewritten on every change (two people editing the same checklist at once: the last save wins), and a document can't grow past 1 MB, so the rules cap the list at 50 items. Something that grows without limit or is queried on its own (comments, say) belongs in a subcollection.
+A task's **checklist** is a list of `{text, done}` maps in the task document itself, not a subcollection. It's small, it's only ever shown with its task, and one document means one read, one listener and no extra rules. The costs: the whole list is rewritten on every change (two people editing the same checklist at once: the last save wins), and a document can't grow past 1 MB, so the rules cap the list at 50 items. Something that grows without limit or is queried on its own belongs in a subcollection, which is where a task's comments are.
 
 ### Indexes
 

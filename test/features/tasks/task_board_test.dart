@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:taskly/features/tasks/presentation/task_board.dart';
 import 'package:taskly/features/tasks/presentation/task_card.dart';
@@ -136,7 +136,15 @@ void main() {
     await seedTask('b', title: 'Not mine', assigneeId: 'bob', order: 2);
     await openBoard(tester);
 
-    expect(find.byTooltip('Actions for "Not mine"'), findsNothing);
+    // Nothing to do to someone else's task but read and comment.
+    await tester.tap(find.byTooltip('Actions for "Not mine"'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Move to'), findsNothing);
+    expect(find.text('Delete'), findsNothing);
+    expect(find.text('Comments and activity'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+
     await tester.tap(find.byTooltip('Actions for "Mine"'));
     await tester.pumpAndSettle();
     expect(find.text('Delete'), findsNothing);

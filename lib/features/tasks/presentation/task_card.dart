@@ -12,6 +12,7 @@ import '../data/task_repository.dart';
 import '../domain/task.dart';
 import 'checklist_progress.dart';
 import 'due_date_label.dart';
+import 'task_activity_sheet.dart';
 import 'task_form.dart';
 
 /// The [pendingDeletionsProvider] key for [task].
@@ -21,7 +22,8 @@ String taskDeletionKey(Task task) => switch (task.projectId) {
 };
 
 /// A task in a list, personal or in a project: a checkbox to complete it,
-/// its title and details, and tap to edit.
+/// its title and details, and tap to edit. A project task also has a button
+/// for its comments.
 class TaskCard extends ConsumerWidget {
   const TaskCard({
     super.key,
@@ -169,6 +171,18 @@ class TaskCard extends ConsumerWidget {
                   ),
                 ),
               ),
+              // Open to viewers too: anyone in the project can comment.
+              if (!task.isPersonal)
+                IconButton(
+                  tooltip: 'Comments on "${task.title}"',
+                  icon: const Icon(Icons.chat_bubble_outline),
+                  onPressed: () => showTaskActivity(
+                    context,
+                    task: task,
+                    members: members,
+                    canModerate: canEdit,
+                  ),
+                ),
               if (canEdit)
                 IconButton(
                   tooltip: 'Delete "${task.title}"',

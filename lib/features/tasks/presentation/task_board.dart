@@ -12,6 +12,7 @@ import '../data/task_repository.dart';
 import '../domain/task.dart';
 import 'checklist_progress.dart';
 import 'due_date_label.dart';
+import 'task_activity_sheet.dart';
 import 'task_card.dart';
 import 'task_form.dart';
 
@@ -316,14 +317,18 @@ class BoardCard extends ConsumerWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  if (canMove)
-                    _CardMenu(
+                  _CardMenu(
+                    task: task,
+                    canMove: canMove,
+                    canDelete: canEdit,
+                    onComments: () => showTaskActivity(
+                      context,
                       task: task,
-                      canDelete: canEdit,
-                      onDelete: () => _delete(context, ref),
-                    )
-                  else
-                    const SizedBox(width: AppSpacing.md, height: 48),
+                      members: members,
+                      canModerate: canEdit,
+                    ),
+                    onDelete: () => _delete(context, ref),
+                  ),
                 ],
               ),
               Padding(
@@ -360,16 +365,20 @@ class BoardCard extends ConsumerWidget {
   }
 }
 
-/// "Move to …" for each other status, and Delete for editors.
+/// "Move to …" for each other status, the comments, and Delete for editors.
 class _CardMenu extends ConsumerWidget {
   const _CardMenu({
     required this.task,
+    required this.canMove,
     required this.canDelete,
+    required this.onComments,
     required this.onDelete,
   });
 
   final Task task;
+  final bool canMove;
   final bool canDelete;
+  final VoidCallback onComments;
   final VoidCallback onDelete;
 
   @override
@@ -379,12 +388,19 @@ class _CardMenu extends ConsumerWidget {
       onSelected: (action) => action(),
       // Not the menu's own context, which is gone once an item is chosen.
       itemBuilder: (_) => [
-        for (final status in TaskStatus.values)
-          if (status != task.status)
-            PopupMenuItem(
-              value: () => moveTask(context, ref, task, status),
-              child: Text('Move to ${status.label}'),
-            ),
+        if (canMove) ...[
+          for (final status in TaskStatus.values)
+            if (status != task.status)
+              PopupMenuItem(
+                value: () => moveTask(context, ref, task, status),
+                child: Text('Move to ${status.label}'),
+              ),
+          const PopupMenuDivider(),
+        ],
+        PopupMenuItem(
+          value: onComments,
+          child: const Text('Comments and activity'),
+        ),
         if (canDelete) ...[
           const PopupMenuDivider(),
           PopupMenuItem(value: onDelete, child: const Text('Delete')),
