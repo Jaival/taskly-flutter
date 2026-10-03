@@ -13,6 +13,7 @@ import 'package:taskly/features/my_tasks/domain/task_export.dart';
 import 'package:taskly/features/projects/domain/project.dart';
 import 'package:taskly/features/tasks/domain/checklist_item.dart';
 import 'package:taskly/features/tasks/domain/task.dart';
+import 'package:taskly/features/tasks/domain/task_label.dart';
 
 import '../../helpers/due_dates.dart';
 import '../../helpers/pump_app.dart';
@@ -25,6 +26,7 @@ MyTask _item(
   TaskStatus status = TaskStatus.notStarted,
   Priority priority = Priority.medium,
   List<ChecklistItem> checklist = const [],
+  List<TaskLabel> labels = const [],
   DateTime? createdAt,
   DateTime? completedAt,
   Project? project,
@@ -39,6 +41,7 @@ MyTask _item(
     status: status,
     priority: priority,
     checklist: checklist,
+    labels: labels,
     createdAt: createdAt,
     completedAt: completedAt,
   ),
@@ -70,6 +73,7 @@ void main() {
             ChecklistItem('Find it', done: true),
             ChecklistItem('Send it'),
           ],
+          labels: const [TaskLabel('Money'), TaskLabel('Waiting, still')],
           createdAt: DateTime(2026, 9, 28, 14, 30),
           project: _launch,
         ),
@@ -81,18 +85,18 @@ void main() {
       ]);
 
       expect(csv, [
-        'Title,Description,Status,Priority,Due date,Project,Checklist,'
-            'Created,Completed',
+        'Title,Description,Status,Priority,Due date,Project,Labels,'
+            'Checklist,Created,Completed',
         'Send the invoice,To the printer,In progress,High,2026-10-03,'
-            'Launch,1 of 2,2026-09-28,',
-        'Pay the deposit,,Complete,Medium,,,,,2026-10-01',
+            'Launch,"Money, Waiting, still",1 of 2,2026-09-28,',
+        'Pay the deposit,,Complete,Medium,,,,,,2026-10-01',
       ]);
     });
 
     test('lines end the way spreadsheets expect', () {
       expect(
         tasksToCsv([_item('One')]),
-        endsWith('One,,Not started,Medium,,,,,\r\n'),
+        endsWith('One,,Not started,Medium,,,,,,\r\n'),
       );
     });
 
@@ -197,6 +201,27 @@ void main() {
         expect(ical.where((line) => line.startsWith('DESCRIPTION')), isEmpty);
       },
     );
+
+    test('labels are categories too, after the project', () {
+      final ical = lines([
+        _item(
+          'Dated',
+          due: DateTime(2026, 10, 3),
+          labels: const [TaskLabel('Money'), TaskLabel('Waiting, still')],
+          project: _launch,
+        ),
+        _item(
+          'Personal',
+          id: 't2',
+          due: DateTime(2026, 10, 3),
+          labels: const [TaskLabel('Home')],
+        ),
+      ]);
+
+      // A comma inside a name is escaped, so it stays one category.
+      expect(ical, contains(r'CATEGORIES:Launch,Money,Waiting\, still'));
+      expect(ical, contains('CATEGORIES:Home'));
+    });
 
     test('a done task is ticked', () {
       final ical = lines([

@@ -5,6 +5,7 @@ import '../../../core/domain/priority.dart';
 import '../../../core/domain/task_status.dart';
 import '../domain/checklist_item.dart';
 import '../domain/task.dart';
+import '../domain/task_label.dart';
 import '../domain/task_repeat.dart';
 
 /// Tasks in one project: `projects/{projectId}/tasks`.
@@ -44,6 +45,7 @@ Task taskFromFirestore(
     },
     repeat: TaskRepeat.fromName(data['repeat']),
     checklist: checklistFromFirestore(data['checklist']),
+    labels: labelsFromFirestore(data['labels']),
     order: data.number('order'),
     createdAt: data.dateTime('createdAt'),
     updatedAt: data.dateTime('updatedAt'),
@@ -74,6 +76,7 @@ Map<String, Object?> taskToFirestore(Task task, SetOptions? _) => {
   'dueDate': dueDateToFirestore(task.dueDate),
   'repeat': task.repeat?.name,
   'checklist': checklistToFirestore(task.checklist),
+  'labels': labelsToFirestore(task.labels),
   'order': task.order,
   'createdAt': createdAtValue(task.createdAt),
   'updatedAt': FieldValue.serverTimestamp(),
@@ -99,4 +102,23 @@ List<ChecklistItem> checklistFromFirestore(Object? value) => switch (value) {
 
 List<Map<String, Object?>> checklistToFirestore(List<ChecklistItem> items) => [
   for (final item in items) {'text': item.text, 'done': item.done},
+];
+
+/// Labels are stored as a list of `{name, color}` maps. As for a checklist,
+/// anything else in the list is skipped, and so are nameless labels.
+List<TaskLabel> labelsFromFirestore(Object? value) => switch (value) {
+  final List<Object?> labels => [
+    for (final label in labels)
+      if (label case final Map<String, Object?> fields
+          when fields.string('name').trim().isNotEmpty)
+        TaskLabel(
+          fields.string('name'),
+          color: LabelColor.fromName(fields['color']),
+        ),
+  ],
+  _ => const [],
+};
+
+List<Map<String, Object?>> labelsToFirestore(List<TaskLabel> labels) => [
+  for (final label in labels) {'name': label.name, 'color': label.color.name},
 ];

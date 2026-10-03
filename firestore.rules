@@ -275,7 +275,8 @@ service cloud.firestore {
               && incoming().description == before.description
               && incoming().priority == before.priority
               && incoming().get('checklist', []).size()
-                   == before.get('checklist', []).size();
+                   == before.get('checklist', []).size()
+              && incoming().get('labels', []) == before.get('labels', []);
         }
 
         allow read: if isProjectMember();
@@ -323,7 +324,7 @@ service cloud.firestore {
             return data.keys().hasOnly(
                      ['kind', 'authorId', 'authorName', 'value', 'createdAt'])
                 && data.kind in ['comment', 'created', 'title', 'description',
-                     'status', 'priority', 'assignee', 'dueDate']
+                     'status', 'priority', 'assignee', 'dueDate', 'labels']
                 && data.authorId == uid()
                 && data.authorName is string && data.authorName.size() <= 100
                 && data.value is string && data.value.size() <= 2000
@@ -369,8 +370,8 @@ service cloud.firestore {
     function isValidTask(data) {
       return data.keys().hasOnly(['ownerId', 'title', 'description',
                'priority', 'status', 'assigneeId', 'dueDate', 'repeat',
-               'repeatedFrom', 'checklist', 'order', 'createdAt', 'updatedAt',
-               'completedAt'])
+               'repeatedFrom', 'checklist', 'labels', 'order', 'createdAt',
+               'updatedAt', 'completedAt'])
           && data.title is string
           && data.title.size() > 0 && data.title.size() <= 200
           && data.description is string && data.description.size() <= 5000
@@ -387,6 +388,10 @@ service cloud.firestore {
           // app skips items of the wrong shape when reading.
           && (data.get('checklist', []) is list
               && data.get('checklist', []).size() <= 50)
+          // Each label is a {name, color} map; like the checklist, only the
+          // count is checked.
+          && (data.get('labels', []) is list
+              && data.get('labels', []).size() <= 10)
           && hasValidCompletedAt(data)
           && data.order is number;
     }

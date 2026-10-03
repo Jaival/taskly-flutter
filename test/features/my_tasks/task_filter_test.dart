@@ -6,6 +6,7 @@ import 'package:taskly/features/my_tasks/domain/task_filter.dart';
 import 'package:taskly/features/projects/domain/project.dart';
 import 'package:taskly/features/tasks/domain/due_date.dart';
 import 'package:taskly/features/tasks/domain/task.dart';
+import 'package:taskly/features/tasks/domain/task_label.dart';
 
 void main() {
   final today = DateTime(2026, 10, 1);
@@ -25,6 +26,7 @@ void main() {
     DateTime? due,
     DateTime? created,
     bool inProject = false,
+    List<TaskLabel> labels = const [],
   }) => MyTask(
     Task(
       id: title,
@@ -36,6 +38,7 @@ void main() {
       dueDate: due,
       createdAt: created,
       projectId: inProject ? 'p1' : null,
+      labels: labels,
     ),
     project: inProject ? launch : null,
   );
@@ -89,6 +92,39 @@ void main() {
     expect(titles(const TaskFilter(projectIds: {null, 'p1'}), items), [
       'mine',
       'launch',
+    ]);
+  });
+
+  test('search matches labels too', () {
+    final items = [
+      item('Logo', labels: const [TaskLabel('Design')]),
+      item('Designer brief'),
+      item('Copy'),
+    ];
+    expect(titles(const TaskFilter(query: 'desig'), items), [
+      'Logo',
+      'Designer brief',
+    ]);
+  });
+
+  test('filters by label, by name across projects, ignoring case', () {
+    final items = [
+      item('mine', labels: const [TaskLabel('Design')]),
+      item(
+        'launch',
+        inProject: true,
+        labels: const [TaskLabel('design', color: LabelColor.red)],
+      ),
+      item('bug', labels: const [TaskLabel('Bug')]),
+      item('none'),
+    ];
+    const filter = TaskFilter(labels: {'design'});
+    expect(filter.isFiltering, isTrue);
+    expect(titles(filter, items), ['mine', 'launch']);
+    expect(titles(const TaskFilter(labels: {'design', 'bug'}), items), [
+      'mine',
+      'launch',
+      'bug',
     ]);
   });
 

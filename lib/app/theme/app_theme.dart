@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'app_spacing.dart';
+import 'label_colors.dart';
 import 'priority_colors.dart';
 
 /// The Taskly brand purple, carried over from v1.
@@ -34,6 +35,7 @@ class AppTheme {
         brightness == Brightness.light
             ? PriorityColors.light
             : PriorityColors.dark,
+        brightness == Brightness.light ? LabelColors.light : LabelColors.dark,
       ],
       appBarTheme: const AppBarTheme(centerTitle: false),
       cardTheme: const CardThemeData(

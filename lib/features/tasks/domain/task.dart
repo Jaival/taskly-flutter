@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../../../core/domain/priority.dart';
 import '../../../core/domain/task_status.dart';
 import 'checklist_item.dart';
+import 'task_label.dart';
 import 'task_repeat.dart';
 
 /// A task, either in a project (`projects/{projectId}/tasks/{id}`) or
@@ -21,6 +22,7 @@ class Task {
     this.dueDate,
     this.repeat,
     this.checklist = const [],
+    this.labels = const [],
     this.order = 0,
     this.createdAt,
     this.updatedAt,
@@ -56,6 +58,9 @@ class Task {
   /// How many [checklist] items are ticked.
   int get checklistDone => checklist.where((item) => item.done).length;
 
+  /// Its labels, in the order they were added.
+  final List<TaskLabel> labels;
+
   /// Sort position within a list. A double, so a task dragged between two
   /// others can take the midpoint without renumbering the rest.
   final double order;
@@ -84,6 +89,7 @@ class Task {
     ValueGetter<DateTime?>? dueDate,
     ValueGetter<TaskRepeat?>? repeat,
     List<ChecklistItem>? checklist,
+    List<TaskLabel>? labels,
     double? order,
   }) => Task(
     id: id,
@@ -97,6 +103,7 @@ class Task {
     dueDate: dueDate != null ? dueDate() : this.dueDate,
     repeat: repeat != null ? repeat() : this.repeat,
     checklist: checklist ?? this.checklist,
+    labels: labels ?? this.labels,
     order: order ?? this.order,
     createdAt: createdAt,
     updatedAt: updatedAt,
@@ -117,6 +124,7 @@ class Task {
       other.dueDate == dueDate &&
       other.repeat == repeat &&
       listEquals(other.checklist, checklist) &&
+      listEquals(other.labels, labels) &&
       other.order == order &&
       other.createdAt == createdAt &&
       other.updatedAt == updatedAt &&
@@ -135,6 +143,7 @@ class Task {
     dueDate,
     repeat,
     Object.hashAll(checklist),
+    Object.hashAll(labels),
     order,
     createdAt,
     updatedAt,

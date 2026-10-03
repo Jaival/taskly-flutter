@@ -11,6 +11,7 @@ import '../../auth/domain/app_user.dart';
 import '../domain/checklist_item.dart';
 import '../domain/task.dart';
 import '../domain/task_activity.dart';
+import '../domain/task_label.dart';
 import '../domain/task_repeat.dart';
 import 'task_activity_firestore.dart';
 import 'task_firestore.dart';
@@ -83,6 +84,7 @@ class TaskRepository {
     DateTime? dueDate,
     TaskRepeat? repeat,
     List<ChecklistItem> checklist = const [],
+    List<TaskLabel> labels = const [],
   }) async {
     final doc = _collection(projectId).doc();
     final batch = _db.batch()
@@ -99,6 +101,7 @@ class TaskRepository {
           dueDate: dueDate,
           repeat: repeat,
           checklist: _tidy(checklist),
+          labels: tidyLabels(labels),
           // Later tasks sort after earlier ones, without reading the list to
           // find the current last position.
           order: _clock().millisecondsSinceEpoch.toDouble(),
@@ -113,7 +116,8 @@ class TaskRepository {
   /// someone else's change to the other fields.
   ///
   /// [assigneeId] and [repeat] are only changed when given: `() => null`
-  /// unassigns, or stops the task repeating.
+  /// unassigns, or stops the task repeating. So are [checklist] and
+  /// [labels].
   ///
   /// Like [setStatus], returns when the next one is due if this completes a
   /// task that repeats.
@@ -127,10 +131,12 @@ class TaskRepository {
     List<ChecklistItem>? checklist,
     ValueGetter<String?>? assigneeId,
     ValueGetter<TaskRepeat?>? repeat,
+    List<TaskLabel>? labels,
   }) async {
     final newTitle = title.trim();
     final newDescription = description.trim();
     final newChecklist = checklist == null ? null : _tidy(checklist);
+    final newLabels = labels == null ? null : tidyLabels(labels);
     // The task as it will be, for the next one if it repeats.
     final edited = task.copyWith(
       title: newTitle,
@@ -138,6 +144,7 @@ class TaskRepository {
       priority: priority,
       dueDate: () => dueDate,
       checklist: newChecklist,
+      labels: newLabels,
       assigneeId: assigneeId,
       repeat: repeat,
     );
@@ -156,6 +163,7 @@ class TaskRepository {
           'repeat': repeat()?.name,
         if (newChecklist != null)
           'checklist': checklistToFirestore(newChecklist),
+        if (newLabels != null) 'labels': labelsToFirestore(newLabels),
         // Personal tasks have no assignee field in the form.
         if (assigneeId != null) 'assigneeId': assigneeId(),
         'updatedAt': FieldValue.serverTimestamp(),
@@ -170,6 +178,8 @@ class TaskRepository {
         ActivityKind.assignee: assignee() ?? '',
       if (newDue != dueDateActivityValue(task.dueDate))
         ActivityKind.dueDate: newDue,
+      if (newLabels != null && !listEquals(newLabels, task.labels))
+        ActivityKind.labels: labelsActivityValue(newLabels),
     });
     if (next != null) _addNext(batch, edited, next);
     await _saved(batch.commit());
@@ -236,6 +246,7 @@ class TaskRepository {
             checklist: [
               for (final item in task.checklist) item.copyWith(done: false),
             ],
+            labels: task.labels,
             order: _clock().millisecondsSinceEpoch.toDouble(),
           ),
           null,
@@ -246,6 +257,43 @@ class TaskRepository {
       },
     );
     _log(batch, task.projectId, doc.id, {ActivityKind.created: ''});
+  }
+
+  /// Renames or recolours the label [from] on every task in a project, or
+  /// on all of [ownerId]'s personal tasks when [projectId] is null. With
+  /// [to] null, takes it off them instead.
+  ///
+  /// Renaming it to another label's name merges the two: tasks with that
+  /// one get [to] too. Returns how many tasks changed.
+  Future<int> editLabel({
+    String? projectId,
+    required String ownerId,
+    required TaskLabel from,
+    TaskLabel? to,
+  }) async {
+    final query = projectId == null
+        ? _collection(null).where('ownerId', isEqualTo: ownerId)
+        : _collection(projectId);
+    final keys = {from.key, ?to?.key};
+    final changes = <DocumentReference<Task>, List<TaskLabel>>{};
+    for (final doc in (await query.get()).docs) {
+      final labels = doc.data().labels;
+      if (!labels.any((label) => keys.contains(label.key))) continue;
+      changes[doc.reference] = replaceLabel(labels, from, to);
+    }
+    final entries = changes.entries.toList();
+    for (var i = 0; i < entries.length; i += _maxBatchWrites) {
+      final batch = _db.batch();
+      for (final MapEntry(key: doc, value: labels)
+          in entries.skip(i).take(_maxBatchWrites)) {
+        batch.update(doc, {
+          'labels': labelsToFirestore(labels),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
+      await _saved(batch.commit());
+    }
+    return changes.length;
   }
 
   /// Deletes the task, and its comments and activity with it: Firestore

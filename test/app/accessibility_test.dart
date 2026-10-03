@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:taskly/app/router.dart';
 import 'package:taskly/features/home/presentation/home_page.dart';
+import 'package:taskly/features/tasks/domain/task_label.dart';
 
 import '../helpers/due_dates.dart';
 import '../helpers/fake_auth_repository.dart';
@@ -60,6 +61,13 @@ void main() {
     // One overdue (in the error colour) and one upcoming.
     await firestore.doc('tasks/a').update({'dueDate': dueTimestamp(-2)});
     await firestore.doc('tasks/b').update({'dueDate': dueTimestamp(1)});
+    // Labels in every colour, on the list and on the board.
+    final labels = [
+      for (final color in LabelColor.values)
+        {'name': color.label, 'color': color.name},
+    ];
+    await firestore.doc('tasks/a').update({'labels': labels});
+    await firestore.doc('projects/p1/tasks/d').update({'labels': labels});
     await firestore.doc('invites/p9_ada@example.com').set({
       'projectId': 'p9',
       'projectName': 'Offsite',
@@ -123,6 +131,36 @@ void main() {
         size: const Size(1400, 1000),
       );
       await tester.tap(find.byTooltip('Show as a board'));
+      await tester.pumpAndSettle();
+
+      await expectLater(tester, meetsGuideline(textContrastGuideline));
+      await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
+      await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+      semantics.dispose();
+    });
+  }
+
+  for (final brightness in Brightness.values) {
+    testWidgets('picking labels meets the guidelines (${brightness.name})', (
+      tester,
+    ) async {
+      final semantics = tester.ensureSemantics();
+      tester.platformDispatcher.platformBrightnessTestValue = brightness;
+      addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
+      await seed();
+      await pumpApp(
+        tester,
+        user: testUser,
+        firestore: firestore,
+        location: Routes.tasks,
+      );
+      await tester.tap(find.text('Task tasks/b'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Add a label'));
+      await tester.tap(find.text('Add a label'));
+      await tester.pumpAndSettle();
+      // A new name, so the colours show too.
+      await tester.enterText(find.byType(TextField).last, 'Errands');
       await tester.pumpAndSettle();
 
       await expectLater(tester, meetsGuideline(textContrastGuideline));

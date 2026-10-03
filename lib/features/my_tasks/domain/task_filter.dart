@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../../../core/domain/priority.dart';
 import '../../../core/domain/task_status.dart';
 import '../../tasks/domain/due_date.dart';
+import '../../tasks/domain/task_label.dart';
 import 'my_task.dart';
 
 enum TaskSort {
@@ -41,10 +42,11 @@ class TaskFilter {
     this.statuses = const {},
     this.due = const {},
     this.projectIds = const {},
+    this.labels = const {},
     this.sort = TaskSort.dueDate,
   });
 
-  /// Matched against the title and description, ignoring case.
+  /// Matched against the title, description and labels, ignoring case.
   final String query;
 
   final Set<Priority> priorities;
@@ -54,6 +56,10 @@ class TaskFilter {
   /// Project IDs to show, with null standing for personal tasks.
   final Set<String?> projectIds;
 
+  /// Labels a task must have one of, by [labelKey]: the same name in two
+  /// projects is the same label here.
+  final Set<String> labels;
+
   final TaskSort sort;
 
   /// Whether anything is filtered out. The sort doesn't count.
@@ -62,7 +68,8 @@ class TaskFilter {
       priorities.isNotEmpty ||
       statuses.isNotEmpty ||
       due.isNotEmpty ||
-      projectIds.isNotEmpty;
+      projectIds.isNotEmpty ||
+      labels.isNotEmpty;
 
   TaskFilter copyWith({
     String? query,
@@ -70,6 +77,7 @@ class TaskFilter {
     Set<TaskStatus>? statuses,
     Set<DueGroup>? due,
     Set<String?>? projectIds,
+    Set<String>? labels,
     TaskSort? sort,
   }) => TaskFilter(
     query: query ?? this.query,
@@ -77,6 +85,7 @@ class TaskFilter {
     statuses: statuses ?? this.statuses,
     due: due ?? this.due,
     projectIds: projectIds ?? this.projectIds,
+    labels: labels ?? this.labels,
     sort: sort ?? this.sort,
   );
 
@@ -92,11 +101,14 @@ class TaskFilter {
     final words = query.trim().toLowerCase();
     return (words.isEmpty ||
             task.title.toLowerCase().contains(words) ||
-            task.description.toLowerCase().contains(words)) &&
+            task.description.toLowerCase().contains(words) ||
+            task.labels.any((label) => label.key.contains(words))) &&
         (priorities.isEmpty || priorities.contains(task.priority)) &&
         (statuses.isEmpty || statuses.contains(task.status)) &&
         (due.isEmpty || due.contains(task.dueGroup(today))) &&
-        (projectIds.isEmpty || projectIds.contains(task.projectId));
+        (projectIds.isEmpty || projectIds.contains(task.projectId)) &&
+        (labels.isEmpty ||
+            task.labels.any((label) => labels.contains(label.key)));
   }
 
   /// The matching [items], sorted. For [TaskSort.dueDate] they're in list
@@ -151,6 +163,7 @@ class TaskFilter {
       setEquals(other.statuses, statuses) &&
       setEquals(other.due, due) &&
       setEquals(other.projectIds, projectIds) &&
+      setEquals(other.labels, labels) &&
       other.sort == sort;
 
   @override
@@ -160,6 +173,7 @@ class TaskFilter {
     Object.hashAllUnordered(statuses),
     Object.hashAllUnordered(due),
     Object.hashAllUnordered(projectIds),
+    Object.hashAllUnordered(labels),
     sort,
   );
 }
