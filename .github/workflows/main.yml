@@ -68,6 +68,20 @@ jobs:
       # web/sw.js against an imitation of a browser; nothing to install.
       - run: node --test "web_test/*.test.mjs"
 
+  wasm:
+    name: WebAssembly build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      # The deployed app is still the JavaScript build. This keeps the code
+      # compiling to WebAssembly too, so switching later is a deploy change.
+      - run: flutter build web --wasm --release
+
   integration:
     name: Integration test
     runs-on: ubuntu-latest
@@ -106,7 +120,7 @@ jobs:
 
   deploy:
     name: Deploy to GitHub Pages
-    needs: [check, rules, web, integration]
+    needs: [check, rules, web, wasm, integration]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:

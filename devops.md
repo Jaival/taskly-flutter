@@ -678,9 +678,12 @@ Someone who signs in with Google has no Taskly password. `AppUser.hasPassword` i
  ┌──────────────── job: web (runs in parallel) ────────────┐
  │ Node 24 → node --test   (19 service worker tests)       │
  └──────────────────────────┬──────────────────────────────┘
+ ┌──────────────── job: wasm (runs in parallel) ───────────┐
+ │ flutter build web --wasm   (keeps it compiling)         │
+ └──────────────────────────┬──────────────────────────────┘
  ┌──────────────── job: integration (runs in parallel) ────┐
- │ Flutter + Java 21 + Node 24 → Auth + Firestore emulators │
- │ → the app in headless Chrome: sign up → task → complete  │
+ │ Flutter, Java 21, Node 24 → Auth + Firestore emulators  │
+ │ → the app in headless Chrome: sign up → task → done     │
  └──────────────────────────┬──────────────────────────────┘
                             │ only if ALL passed AND branch is main
                             ▼
