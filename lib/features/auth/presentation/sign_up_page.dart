@@ -13,6 +13,7 @@ import '../../profile/domain/user_profile.dart';
 import '../data/auth_repository.dart';
 import '../domain/auth_failure.dart';
 import 'widgets/auth_layout.dart';
+import 'widgets/google_sign_in_button.dart';
 import 'widgets/password_field.dart';
 import 'widgets/switch_auth_page_link.dart';
 
@@ -138,6 +139,9 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
                 label: 'Create account',
                 busy: _submitting,
                 onPressed: _submit,
+              ),
+              GoogleSignInButton(
+                onError: (message) => setState(() => _error = message),
               ),
               const SizedBox(height: AppSpacing.lg),
               const SwitchAuthPageLink(

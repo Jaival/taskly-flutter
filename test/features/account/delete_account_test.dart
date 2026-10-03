@@ -149,6 +149,7 @@ void main() {
         location: Routes.profile,
       );
       await tester.ensureVisible(find.text('Delete account'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Delete account'));
       await tester.pumpAndSettle();
       return auth;

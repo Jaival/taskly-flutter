@@ -23,16 +23,23 @@ class AccountDeletion {
   final TaskRepository tasks;
   final UserProfileRepository profiles;
 
-  /// Throws an `AuthFailure` if [password] is wrong, before deleting
-  /// anything. If the connection drops part-way, the account is still
-  /// there, and deleting it again finishes the job.
-  Future<void> deleteAccount({required String password}) async {
+  /// Pass the [password], or null for someone who signs in with Google, who
+  /// is asked to do that again instead.
+  ///
+  /// Throws an `AuthFailure` if that check fails, before deleting anything.
+  /// If the connection drops part-way, the account is still there, and
+  /// deleting it again finishes the job.
+  Future<void> deleteAccount({required String? password}) async {
     final uid = auth.currentUser?.uid;
     if (uid == null) return;
 
     // First: Firebase only deletes an account soon after a sign-in. Finding
     // that out after the data was gone would leave an empty account behind.
-    await auth.reauthenticate(password);
+    if (password == null) {
+      await auth.reauthenticateWithGoogle();
+    } else {
+      await auth.reauthenticate(password);
+    }
 
     for (final project in await projects.watchProjects(uid).first) {
       if (project.ownerId == uid) {

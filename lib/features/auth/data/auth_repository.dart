@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../domain/app_user.dart';
@@ -49,6 +50,23 @@ class AuthRepository {
     );
   });
 
+  /// Whether [signInWithGoogle] works here. Only on the web for now:
+  /// Firebase opens Google's sign-in window itself there. Android and iOS
+  /// need the `google_sign_in` package and per-app setup in the console.
+  bool get supportsGoogleSignIn => kIsWeb;
+
+  /// Opens Google's sign-in window. Signs in, or creates the account the
+  /// first time. Null if the user closed the window.
+  Future<AppUser?> signInWithGoogle() => _guard(() async {
+    try {
+      final credential = await _auth.signInWithPopup(GoogleAuthProvider());
+      return _toAppUser(credential.user);
+    } on FirebaseAuthException catch (e) {
+      if (authCancelledCodes.contains(e.code)) return null;
+      rethrow;
+    }
+  });
+
   /// Always succeeds for well-formed emails, even without an account, so the
   /// response can't reveal who has signed up.
   Future<void> sendPasswordReset(String email) =>
@@ -89,6 +107,19 @@ class AuthRepository {
   /// [deleteAccount], which Firebase only allows soon after a sign-in.
   Future<void> reauthenticate(String password) =>
       _guard(() => _reauthenticate(password));
+
+  /// [reauthenticate] for someone with no password: Google's sign-in window
+  /// again. Throws if they close it.
+  Future<void> reauthenticateWithGoogle() => _guard(() async {
+    try {
+      await _auth.currentUser?.reauthenticateWithPopup(GoogleAuthProvider());
+    } on FirebaseAuthException catch (e) {
+      if (authCancelledCodes.contains(e.code)) {
+        throw const AuthFailure('Sign in with Google again to confirm.');
+      }
+      rethrow;
+    }
+  });
 
   /// Deletes the account and signs out. Its data in Firestore has to be
   /// deleted first, while there's still a user to delete it as.
@@ -140,6 +171,10 @@ class AuthRepository {
           email: user.email,
           displayName: user.displayName,
           emailVerified: user.emailVerified,
+          // No providers at all only happens in tests.
+          hasPassword:
+              user.providerData.isEmpty ||
+              user.providerData.any((info) => info.providerId == 'password'),
         );
 }
 

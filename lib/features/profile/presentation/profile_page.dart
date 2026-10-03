@@ -231,17 +231,24 @@ class _AccountCard extends ConsumerWidget {
                 : const Text('Not verified'),
           ),
           const Divider(height: 1),
-          ListTile(
-            leading: const Icon(Icons.password),
-            title: const Text('Change password'),
-            onTap: switch (user.email) {
-              final email? => () => showChangePasswordDialog(
-                context,
-                email: email,
-              ),
-              null => null,
-            },
-          ),
+          if (user.hasPassword)
+            ListTile(
+              leading: const Icon(Icons.password),
+              title: const Text('Change password'),
+              onTap: switch (user.email) {
+                final email? => () => showChangePasswordDialog(
+                  context,
+                  email: email,
+                ),
+                null => null,
+              },
+            )
+          else
+            const ListTile(
+              leading: Icon(Icons.account_circle_outlined),
+              title: Text('Signed in with Google'),
+              subtitle: Text("There's no Taskly password to change."),
+            ),
           const Divider(height: 1),
           ListTile(
             leading: Icon(Icons.logout, color: colors.error),

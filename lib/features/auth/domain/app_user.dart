@@ -8,6 +8,7 @@ class AppUser {
     this.email,
     this.displayName,
     this.emailVerified = false,
+    this.hasPassword = true,
   });
 
   final String uid;
@@ -17,6 +18,10 @@ class AppUser {
   /// Whether the user has clicked the link in the verification email.
   /// Needed to accept project invites.
   final bool emailVerified;
+
+  /// False for someone who only signs in with Google: there's no password
+  /// to change, or to ask for before deleting the account.
+  final bool hasPassword;
 
   /// The first word of the display name, for greetings. Null if unnamed.
   String? get firstName {
@@ -39,8 +44,10 @@ class AppUser {
       other.uid == uid &&
       other.email == email &&
       other.displayName == displayName &&
-      other.emailVerified == emailVerified;
+      other.emailVerified == emailVerified &&
+      other.hasPassword == hasPassword;
 
   @override
-  int get hashCode => Object.hash(uid, email, displayName, emailVerified);
+  int get hashCode =>
+      Object.hash(uid, email, displayName, emailVerified, hasPassword);
 }

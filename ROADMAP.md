@@ -253,14 +253,17 @@ Tier A is what makes this feel like a real product. The rest is optional.
   - In a text field the keys are typed as usual, and while a form or dialog is open the shortcuts are off. They work with any keyboard, not only on the web.
 
 ### Tier B: accounts and collaboration
-- [ ] **Google sign-in**, email verification, change password, delete account.
+- [x] **Google sign-in**, email verification, change password, delete account.
   - [x] Email verification: done in Phase 1 (the banner, "Resend" and "I've verified").
   - [x] Change password: "Change password" on the Profile page asks for the current password and a new one (at least 8 characters, and different). Checking the current one is what Firebase requires before a password change, and it stops someone at an unlocked laptop locking the owner out. "Forgot it? Email me a reset link" is still there for anyone who can't remember it.
   - [x] Delete account: "Delete account" at the bottom of the Profile page. The dialog says what goes (your personal tasks, the projects you own with their tasks and invites), warns when some of those projects are shared, and asks for your password.
     - Projects shared with you stay, without you. Tasks you created there stay too, and tasks assigned to you show as unassigned.
     - There are no Cloud Functions, so the app deletes the data as you, then the account last (devops.md 4). If the connection drops part-way the account is still there, and deleting again finishes the job.
     - Invites other people sent to your email are left alone: they belong to the inviter, who can cancel them.
-  - [ ] Google sign-in.
+  - [x] Google sign-in, on the web: "Continue with Google" on the login and sign-up pages. The first time it creates the account and its profile, with the name from Google. Closing Google's window just leaves you on the page.
+    - **To do in the console before it works:** enable the Google provider and check the authorised domains (devops.md 7). Until then the button says that way of signing in isn't enabled. The flow is covered by tests against a fake, but has not been tried against real Google yet.
+    - Someone who signs in with Google has no password, so the Profile page says "Signed in with Google" instead of "Change password", and deleting the account asks them to sign in with Google again rather than for a password.
+    - Not on Android or iOS yet: that needs the `google_sign_in` package and per-app setup in the console, so the button isn't shown there. The button has no Google logo.
 - [ ] **Comments and an activity log** on tasks ("Alex moved this to In Progress").
 - [ ] **Avatar upload** via Firebase Storage.
 

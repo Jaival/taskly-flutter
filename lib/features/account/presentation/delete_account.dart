@@ -48,6 +48,10 @@ class _DeleteAccountDialogState extends ConsumerState<_DeleteAccountDialog> {
   bool _deleting = false;
   String? _error;
 
+  /// False for someone who signs in with Google, who confirms that way.
+  bool get _hasPassword =>
+      ref.read(authStateProvider).value?.hasPassword ?? true;
+
   @override
   void dispose() {
     _password.dispose();
@@ -65,7 +69,7 @@ class _DeleteAccountDialogState extends ConsumerState<_DeleteAccountDialog> {
     try {
       await ref
           .read(accountDeletionProvider)
-          .deleteAccount(password: _password.text);
+          .deleteAccount(password: _hasPassword ? _password.text : null);
       messenger.showSnackBar(
         const SnackBar(content: Text('Your account was deleted.')),
       );
@@ -126,11 +130,16 @@ class _DeleteAccountDialogState extends ConsumerState<_DeleteAccountDialog> {
               ),
             ],
             const SizedBox(height: AppSpacing.md),
-            PasswordField(
-              controller: _password,
-              label: 'Your password',
-              onSubmitted: _delete,
-            ),
+            if (_hasPassword)
+              PasswordField(
+                controller: _password,
+                label: 'Your password',
+                onSubmitted: _delete,
+              )
+            else
+              const Text(
+                "You'll be asked to sign in with Google again to confirm.",
+              ),
             if (_error case final error?) ...[
               const SizedBox(height: AppSpacing.md),
               FormError(error),

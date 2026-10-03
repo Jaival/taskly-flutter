@@ -94,6 +94,28 @@ class FakeAuthRepository implements AuthRepository {
     return user;
   }
 
+  /// Who [signInWithGoogle] signs in. Null as if they closed the window.
+  AppUser? googleUser;
+
+  @override
+  bool supportsGoogleSignIn = true;
+
+  @override
+  Future<AppUser?> signInWithGoogle() async {
+    _maybeFail();
+    if (googleUser case final user?) emit(user);
+    return googleUser;
+  }
+
+  /// How often [reauthenticateWithGoogle] was called.
+  int googleReauthentications = 0;
+
+  @override
+  Future<void> reauthenticateWithGoogle() async {
+    _maybeFail();
+    googleReauthentications++;
+  }
+
   @override
   Future<void> sendPasswordReset(String email) async {
     _maybeFail();
@@ -117,6 +139,7 @@ class FakeAuthRepository implements AuthRepository {
           email: user.email,
           displayName: user.displayName,
           emailVerified: true,
+          hasPassword: user.hasPassword,
         ),
       );
     }
@@ -132,6 +155,7 @@ class FakeAuthRepository implements AuthRepository {
         email: user.email,
         displayName: displayName.trim(),
         emailVerified: user.emailVerified,
+        hasPassword: user.hasPassword,
       ),
     );
   }

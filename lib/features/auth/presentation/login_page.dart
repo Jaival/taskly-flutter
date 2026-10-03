@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,12 +8,11 @@ import '../../../core/forms/validators.dart';
 import '../../../core/widgets/form_error.dart';
 import '../../../core/widgets/progress_button.dart';
 import '../../profile/data/user_profile_repository.dart';
-import '../../profile/domain/user_profile.dart';
 import '../data/auth_repository.dart';
-import '../domain/app_user.dart';
 import '../domain/auth_failure.dart';
 import 'forgot_password_dialog.dart';
 import 'widgets/auth_layout.dart';
+import 'widgets/google_sign_in_button.dart';
 import 'widgets/password_field.dart';
 import 'widgets/switch_auth_page_link.dart';
 
@@ -56,30 +54,11 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       );
       // Offer to save the password.
       TextInput.finishAutofillContext();
-      await _ensureProfile(profiles, user);
+      await ensureProfileFor(profiles, user);
     } on AuthFailure catch (failure) {
       if (mounted) setState(() => _error = failure.message);
     } finally {
       if (mounted) setState(() => _submitting = false);
-    }
-  }
-
-  /// Repairs accounts whose profile wasn't created at sign-up (e.g. the
-  /// connection dropped). Failing here mustn't stop the user signing in.
-  static Future<void> _ensureProfile(
-    UserProfileRepository profiles,
-    AppUser user,
-  ) async {
-    try {
-      await profiles.ensureProfile(
-        UserProfile(
-          uid: user.uid,
-          displayName: user.displayName ?? '',
-          email: user.email ?? '',
-        ),
-      );
-    } on FirebaseException catch (e) {
-      debugPrint('Could not check profile for ${user.uid}: ${e.code}');
     }
   }
 
@@ -121,6 +100,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 label: 'Log in',
                 busy: _submitting,
                 onPressed: _submit,
+              ),
+              GoogleSignInButton(
+                onError: (message) => setState(() => _error = message),
               ),
               const SizedBox(height: AppSpacing.lg),
               const SwitchAuthPageLink(
