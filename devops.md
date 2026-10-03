@@ -69,6 +69,7 @@ Three consequences of this design:
 | **Material 3** | Google's current design system, built into Flutter. | Modern look, dark mode and accessibility for free. | Cupertino, custom design |
 | **connectivity_plus** | Tells the app whether the device has a network. | For the "You're offline" banner, and to stop forms waiting for a server that can't be reached. | Pinging a server, `internet_connection_checker` |
 | **web** | Dart's typed access to browser APIs. | Only `core/data/web_app_browser.dart` uses it, to talk to the service worker and to hear the browser's offer to install the app. | `dart:html` (removed from Flutter web), hand-written JavaScript |
+| **share_plus** | Opens the phone's share sheet. | To hand an exported file to the user on Android and iOS, where an app can't just "download" one. In a browser the app downloads the file itself (`core/data/file_export_browser.dart`). | `file_saver`, `path_provider` plus a file picker |
 | **google_fonts** | Loads Google Fonts at runtime. | Keeps Montserrat from v1 without bundling font files. | Bundled font assets |
 | **flutter_lints** | Recommended static analysis rules. | Catches bugs and style issues before they run. | very_good_analysis |
 | **GitHub Actions** | CI/CD: runs scripts on GitHub's machines when you push. | Free for public repos, lives next to the code. | GitLab CI, Codemagic |
@@ -519,7 +520,7 @@ A key press goes to the widget that has the **focus**, then up through its paren
 
 There are two test suites:
 
-- **Dart tests** (`test/`, 369 tests): run with `flutter test`. Takes a few seconds.
+- **Dart tests** (`test/`, 389 tests): run with `flutter test`. Takes a few seconds.
 - **Service worker tests** (`web_test/`, 19 tests): run with `node --test "web_test/*.test.mjs"`. No install step: they load `web/sw.js` into an imitation of a browser (section 9).
 - **Security rules tests** (`rules_test/`, 63 tests): run with `npm test` inside `rules_test/`. This starts the Firestore emulator, runs the tests, and stops it. If the emulators are already running (you'd get "port taken"), use them instead: `FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npm run test:only`. The tests load `firestore.rules` fresh each run. See [section 11](#11-firestore-primer-read-before-phase-2).
 
@@ -976,6 +977,7 @@ Always run the rules tests first. The Firebase console also has a "Rules Playgro
 | The web app shows an old version after a deploy | That's the service worker doing its job: the page comes from the copy on the device until the update is applied | Wait for the "new version" banner, or close every Taskly tab and reopen. To check what's there: DevTools → Application → Cache storage (section 9) |
 | A release build on `localhost` never shows the update banner | The service worker is off on localhost unless asked for | `localStorage.setItem('taskly.serviceWorker', 'on')` in the console, reload (section 9) |
 | A release build on Android can't sign in when run with the emulators; the log says `Cleartext HTTP traffic to 10.0.2.2 not permitted` | Release builds only allow `https://`, and the emulators are plain HTTP | Expected. Use a debug build with the emulators (section 9, "Releasing on Android") |
+| An exported spreadsheet shows `'=…` or `'-…` with an apostrophe in front | On purpose: a cell that starts with `=`, `+`, `-` or `@` is run as a formula by spreadsheet programs, and task titles are typed by other people | Nothing. See `_csvCell` in `my_tasks/domain/task_export.dart` |
 | App on the emulator can't reach the Firebase emulators | Emulators not running, or the app was started without the flag | Start them first; run with `--dart-define=USE_FIREBASE_EMULATORS=true` |
 
 ---

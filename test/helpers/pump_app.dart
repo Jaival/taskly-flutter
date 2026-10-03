@@ -6,6 +6,7 @@ import 'package:taskly/app/app.dart';
 import 'package:taskly/app/router.dart';
 import 'package:taskly/app/theme/app_theme.dart';
 import 'package:taskly/core/data/connection.dart';
+import 'package:taskly/core/data/file_export.dart';
 import 'package:taskly/core/data/firestore_provider.dart';
 import 'package:taskly/core/data/web_app.dart';
 import 'package:taskly/features/auth/data/auth_repository.dart';
@@ -32,7 +33,8 @@ void setWindowSize(WidgetTester tester, Size size) {
 /// Pumps the full app at [location] with fake auth and an in-memory
 /// Firestore. Pass [auth] or [firestore] to set them up or inspect them,
 /// [online] to take the device offline (it's online until told otherwise),
-/// and [webApp] to play the browser offering an update or to install the app.
+/// [webApp] to play the browser offering an update or to install the app,
+/// and [saveFile] to catch exported files.
 Future<FakeAuthRepository> pumpApp(
   WidgetTester tester, {
   AppUser? user,
@@ -40,6 +42,7 @@ Future<FakeAuthRepository> pumpApp(
   FakeFirebaseFirestore? firestore,
   Stream<bool>? online,
   WebApp? webApp,
+  SaveFile? saveFile,
   String location = Routes.landing,
   Size size = const Size(400, 800),
 }) async {
@@ -56,6 +59,7 @@ Future<FakeAuthRepository> pumpApp(
       // The real one asks the platform, which tests don't have.
       connectivityProvider.overrideWithValue(online ?? const Stream.empty()),
       if (webApp != null) webAppProvider.overrideWithValue(webApp),
+      if (saveFile != null) saveFileProvider.overrideWithValue(saveFile),
       // Google Fonts would try to download fonts during tests.
       appThemeProvider.overrideWithValue(
         const AppTheme(textThemeBuilder: _defaultFont),

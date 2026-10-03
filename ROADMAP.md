@@ -309,7 +309,13 @@ Tier A is what makes this feel like a real product. The rest is optional.
 - [ ] **Recurring tasks** (daily, weekly).
 - [ ] **Labels/tags** with colours.
 - [ ] **AI assist:** "break this task into subtasks" or natural-language quick add ("Finish report by Friday high priority"), via a Cloud Function calling an LLM API. Keep API keys server-side.
-- [ ] **Export** to CSV or iCal.
+- [x] **Export** to CSV or iCal.
+  - The download button beside the search box on the Tasks page saves the tasks on the page, so the search and filters decide what's in the file. In a browser it downloads; on a phone it opens the share sheet, to save the file or send it.
+  - **Spreadsheet (.csv):** title, description, status, priority, due date, project, checklist progress, created and completed dates. Opens in Excel, Google Sheets and Numbers, accents included.
+  - **Calendar (.ics):** each task with a due date as an all-day event, done ones ticked, to import into Google Calendar, Outlook or Apple Calendar. Tasks without a due date can't be in a calendar, and the message says how many were left out.
+  - It's a snapshot: the file doesn't update when the tasks do. Importing a newer export updates the same events in calendars that support it, and may duplicate them in others.
+  - Events rather than to-dos, because Google Calendar and Outlook ignore to-dos in an imported file.
+  - The files were checked by reading them, on Android and in Chrome. They haven't been imported into an actual spreadsheet or calendar program yet.
 
 ---
 

@@ -3,14 +3,17 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_spacing.dart';
+import '../../../core/data/file_export.dart';
 import '../../../core/domain/priority.dart';
 import '../../../core/domain/task_status.dart';
 import '../../projects/domain/project.dart';
 import '../data/my_tasks_provider.dart';
+import '../domain/my_task.dart';
+import '../domain/task_export.dart';
 import '../domain/task_filter.dart';
 
-/// Search, the list/calendar switch, filter menus and sort for the Tasks
-/// page.
+/// Search, the list/calendar switch, filter menus, sort and export for the
+/// Tasks page.
 class TaskFilterBar extends ConsumerWidget {
   const TaskFilterBar({
     super.key,
@@ -23,8 +26,8 @@ class TaskFilterBar extends ConsumerWidget {
   /// any.
   final List<Project> projects;
 
-  /// How many tasks the filters let through, of how many.
-  final int shown;
+  /// The tasks the filters let through, of how many.
+  final List<MyTask> shown;
   final int total;
 
   @override
@@ -61,6 +64,8 @@ class TaskFilterBar extends ConsumerWidget {
               onSelectionChanged: (selected) =>
                   ref.read(tasksViewProvider.notifier).show(selected.single),
             ),
+            // Here rather than with the chips, which scroll out of sight.
+            _ExportMenu(shown),
           ],
         ),
         const SizedBox(height: AppSpacing.sm),
@@ -122,7 +127,8 @@ class TaskFilterBar extends ConsumerWidget {
                 child: Semantics(
                   liveRegion: true,
                   child: Text(
-                    'Showing $shown of $total ${total == 1 ? 'task' : 'tasks'}',
+                    'Showing ${shown.length} of $total '
+                    '${total == 1 ? 'task' : 'tasks'}',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ),
@@ -305,6 +311,97 @@ class _SortMenu extends StatelessWidget {
         avatar: const Icon(Icons.swap_vert),
         tooltip: 'Sort',
         label: _ChipLabel('Sort: ${sort.label}'),
+        onPressed: () =>
+            controller.isOpen ? controller.close() : controller.open(),
+      ),
+    );
+  }
+}
+
+enum _ExportFormat {
+  csv('Spreadsheet (.csv)', Icons.table_chart_outlined),
+  iCal('Calendar (.ics)', Icons.event_outlined);
+
+  const _ExportFormat(this.label, this.icon);
+
+  final String label;
+  final IconData icon;
+}
+
+/// A button that saves the tasks on the page as a file.
+class _ExportMenu extends ConsumerWidget {
+  const _ExportMenu(this.items);
+
+  /// What the page is showing: the filters apply to the export too.
+  final List<MyTask> items;
+
+  static String _count(int tasks) => tasks == 1 ? '1 task' : '$tasks tasks';
+
+  Future<void> _export(
+    BuildContext context,
+    WidgetRef ref,
+    _ExportFormat format,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    void say(String message) =>
+        messenger.showSnackBar(SnackBar(content: Text(message)));
+
+    final now = DateTime.now();
+    final name = 'taskly-tasks-${now.toIso8601String().substring(0, 10)}';
+    final dated = items.where((item) => item.task.dueDate != null).length;
+    final undated = items.length - dated;
+
+    final ExportFile file;
+    final String done;
+    switch (format) {
+      case _ExportFormat.csv:
+        file = ExportFile(
+          name: '$name.csv',
+          mimeType: 'text/csv',
+          // The mark at the start tells Excel the file is UTF-8; without
+          // it, accented letters come out wrong.
+          text: '\uFEFF${tasksToCsv(items)}',
+        );
+        done = 'Exported ${_count(items.length)}.';
+      case _ExportFormat.iCal when dated == 0:
+        say(
+          'None of these tasks has a due date, so there is nothing to put '
+          'in a calendar.',
+        );
+        return;
+      case _ExportFormat.iCal:
+        file = ExportFile(
+          name: '$name.ics',
+          mimeType: 'text/calendar',
+          text: tasksToICal(items, now: now),
+        );
+        done = undated == 0
+            ? 'Exported ${_count(dated)}.'
+            : 'Exported ${_count(dated)}. $undated without a due date '
+                  '${undated == 1 ? 'was' : 'were'} left out.';
+    }
+
+    try {
+      if (await ref.read(saveFileProvider)(file)) say(done);
+    } on Object {
+      say("Couldn't export the tasks. Please try again.");
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return MenuAnchor(
+      menuChildren: [
+        for (final format in _ExportFormat.values)
+          MenuItemButton(
+            leadingIcon: Icon(format.icon),
+            onPressed: () => _export(context, ref, format),
+            child: Text(format.label),
+          ),
+      ],
+      builder: (context, controller, _) => IconButton(
+        icon: const Icon(Icons.file_download_outlined),
+        tooltip: 'Export these tasks',
         onPressed: () =>
             controller.isOpen ? controller.close() : controller.open(),
       ),

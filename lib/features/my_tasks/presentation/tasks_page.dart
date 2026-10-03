@@ -109,7 +109,7 @@ class _FilteredTasks extends ConsumerWidget {
             ),
             child: TaskFilterBar(
               projects: projects,
-              shown: shown.length,
+              shown: shown,
               total: items.length,
             ),
           ),
