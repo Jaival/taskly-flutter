@@ -94,6 +94,7 @@ class TaskRepository {
     'description': description.trim(),
     'priority': priority.name,
     'status': status.name,
+    ..._completedAt(task, status),
     'dueDate': dueDateToFirestore(dueDate),
     if (checklist != null) 'checklist': checklistToFirestore(_tidy(checklist)),
     // Only when given: personal tasks have no assignee field in the form.
@@ -104,11 +105,23 @@ class TaskRepository {
 
   /// Changes only the status. The rules let viewers do this, but nothing
   /// else, on tasks assigned to them.
-  Future<void> setStatus(Task task, TaskStatus status) => _doc(
-    task,
-  ).update({'status': status.name, 'updatedAt': FieldValue.serverTimestamp()});
+  Future<void> setStatus(Task task, TaskStatus status) => _doc(task).update({
+    'status': status.name,
+    ..._completedAt(task, status),
+    'updatedAt': FieldValue.serverTimestamp(),
+  });
 
   Future<void> deleteTask(Task task) => _doc(task).delete();
+
+  /// What to write to `completedAt` when [task] moves to [status]: now when
+  /// it becomes complete, nothing when it already was (so editing a done
+  /// task doesn't move it to today), and null when it's open.
+  static Map<String, Object?> _completedAt(Task task, TaskStatus status) => {
+    if (status != TaskStatus.complete)
+      'completedAt': null
+    else if (!task.isComplete)
+      'completedAt': FieldValue.serverTimestamp(),
+  };
 
   /// Trimmed, without blank items.
   static List<ChecklistItem> _tidy(List<ChecklistItem> items) => [

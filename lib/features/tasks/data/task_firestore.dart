@@ -47,6 +47,7 @@ Task taskFromFirestore(
     order: data.number('order'),
     createdAt: data.dateTime('createdAt'),
     updatedAt: data.dateTime('updatedAt'),
+    completedAt: data.dateTime('completedAt'),
   );
 }
 
@@ -64,6 +65,7 @@ Map<String, Object?> taskToFirestore(Task task, SetOptions? _) => {
   'order': task.order,
   'createdAt': createdAtValue(task.createdAt),
   'updatedAt': FieldValue.serverTimestamp(),
+  'completedAt': timestampOrNull(task.completedAt),
 };
 
 /// A due date is a calendar day, stored as midnight UTC on that day. Read

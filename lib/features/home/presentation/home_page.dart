@@ -21,13 +21,14 @@ import '../../projects/presentation/project_form.dart';
 import '../../tasks/domain/due_date.dart';
 import '../../tasks/presentation/task_card.dart';
 import '../../tasks/presentation/task_form.dart';
+import 'progress_card.dart';
 
 /// How many open tasks and recent projects the dashboard shows.
 const _upNextCount = 5;
 const _recentProjectCount = 4;
 
-/// `/home`: counts, the next few of the user's tasks and recently changed
-/// projects.
+/// `/home`: counts, the last week's progress, the next few of the user's
+/// tasks and recently changed projects.
 class HomePage extends ConsumerWidget {
   const HomePage({super.key});
 
@@ -101,6 +102,7 @@ class HomePage extends ConsumerWidget {
                 }, style: Theme.of(context).textTheme.headlineSmall),
                 const SizedBox(height: AppSpacing.md),
                 _Stats(tasks: tasks, projects: projects),
+                ProgressCard(tasks: tasks),
                 const SizedBox(height: AppSpacing.lg),
                 if (wide)
                   Row(

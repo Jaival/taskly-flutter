@@ -268,8 +268,9 @@ service cloud.firestore {
             ) || (
               isProjectMember()
               && resource.data.assigneeId == uid()
-              && changedKeys().hasOnly(['status', 'updatedAt'])
+              && changedKeys().hasOnly(['status', 'completedAt', 'updatedAt'])
               && isValidStatus(incoming().status)
+              && hasValidCompletedAt(incoming())
               && incoming().updatedAt == request.time
             );
 
@@ -281,7 +282,7 @@ service cloud.firestore {
     function isValidTask(data) {
       return data.keys().hasOnly(['ownerId', 'title', 'description',
                'priority', 'status', 'assigneeId', 'dueDate', 'checklist',
-               'order', 'createdAt', 'updatedAt'])
+               'order', 'createdAt', 'updatedAt', 'completedAt'])
           && data.title is string
           && data.title.size() > 0 && data.title.size() <= 200
           && data.description is string && data.description.size() <= 5000
@@ -294,7 +295,15 @@ service cloud.firestore {
           // app skips items of the wrong shape when reading.
           && (data.get('checklist', []) is list
               && data.get('checklist', []).size() <= 50)
+          && hasValidCompletedAt(data)
           && data.order is number;
+    }
+
+    // When the task was completed: only on a complete task. Older tasks
+    // have no such field.
+    function hasValidCompletedAt(data) {
+      return data.get('completedAt', null) == null
+          || (data.completedAt is timestamp && data.status == 'complete');
     }
 
     // --------------------------------------------------------- personal tasks

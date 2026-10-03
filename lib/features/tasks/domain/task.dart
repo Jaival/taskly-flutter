@@ -22,6 +22,7 @@ class Task {
     this.order = 0,
     this.createdAt,
     this.updatedAt,
+    this.completedAt,
   });
 
   final String id;
@@ -54,6 +55,11 @@ class Task {
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
+  /// When the status last became complete; null for an open task. Also
+  /// null for tasks completed before this was recorded, and until the
+  /// write reaches the server.
+  final DateTime? completedAt;
+
   bool get isPersonal => projectId == null;
 
   bool get isComplete => status == TaskStatus.complete;
@@ -83,6 +89,7 @@ class Task {
     order: order ?? this.order,
     createdAt: createdAt,
     updatedAt: updatedAt,
+    completedAt: completedAt,
   );
 
   @override
@@ -100,7 +107,8 @@ class Task {
       listEquals(other.checklist, checklist) &&
       other.order == order &&
       other.createdAt == createdAt &&
-      other.updatedAt == updatedAt;
+      other.updatedAt == updatedAt &&
+      other.completedAt == completedAt;
 
   @override
   int get hashCode => Object.hash(
@@ -117,6 +125,7 @@ class Task {
     order,
     createdAt,
     updatedAt,
+    completedAt,
   );
 
   @override

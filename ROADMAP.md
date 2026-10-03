@@ -242,7 +242,10 @@ Tier A is what makes this feel like a real product. The rest is optional.
   - Stored as a list of `{text, done}` inside the task document, so a task and its checklist arrive in one read. The rules cap it at 50 items (devops.md 11). Viewers can't change a checklist, as with every field but the status.
   - Task and board cards show "2/5" beside the due date. Project cards show a bar and "3/8" of their tasks done; cards without tasks show nothing.
   - Project cards are a little taller (220), which also fixes a two-line name with a two-line description overflowing the old card. The status label on a narrow card is no longer cut short ("In pro…").
-- [ ] **Dashboard stats:** overdue count, done this week, and a small completion chart.
+- [x] **Dashboard stats:** overdue count, done this week, and a small completion chart.
+  - A card on Home, under the counts: how many tasks were done in the last 7 days (today and the six days before, not the calendar week), a bar for each of those days, and "2 overdue", which opens the Tasks page showing only those. With nothing late it says "Nothing overdue".
+  - Tasks now record when they were completed (`completedAt`): set when the status becomes Complete, cleared when the task is reopened, and left alone when a done task is edited. The rules allow it only on a complete task (devops.md 11). Tasks completed before this count on the day they were last changed.
+  - Like the counts above it, the card covers personal tasks and the project tasks assigned to you. The chart is drawn with plain widgets, so there's no chart package to keep up to date.
 - [ ] **Keyboard shortcuts** on desktop web (`N` for new task, `/` for search, `Esc` to close) via `Shortcuts`/`Actions`.
 
 ### Tier B: accounts and collaboration

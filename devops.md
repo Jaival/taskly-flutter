@@ -488,8 +488,8 @@ Three details:
 
 There are two test suites:
 
-- **Dart tests** (`test/`, 246 tests): run with `flutter test`. Takes a few seconds.
-- **Security rules tests** (`rules_test/`, 52 tests): run with `npm test` inside `rules_test/`. This starts the Firestore emulator, runs the tests, and stops it. If the emulators are already running (you'd get "port taken"), use them instead: `FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npm run test:only`. The tests load `firestore.rules` fresh each run. See [section 11](#11-firestore-primer-read-before-phase-2).
+- **Dart tests** (`test/`, 258 tests): run with `flutter test`. Takes a few seconds.
+- **Security rules tests** (`rules_test/`, 53 tests): run with `npm test` inside `rules_test/`. This starts the Firestore emulator, runs the tests, and stops it. If the emulators are already running (you'd get "port taken"), use them instead: `FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npm run test:only`. The tests load `firestore.rules` fresh each run. See [section 11](#11-firestore-primer-read-before-phase-2).
 
 ### The testing pyramid
 
@@ -608,7 +608,7 @@ Things that **are** secret and must never be committed: service account JSON fil
  └──────────────────────────┬──────────────────────────────┘
  ┌──────────────── job: rules (runs in parallel) ──────────┐
  │ Java 21 + Node 24 → npm ci → npm test                   │
- │ (Firestore emulator + 52 security rules tests)          │
+ │ (Firestore emulator + 53 security rules tests)          │
  └──────────────────────────┬──────────────────────────────┘
                             │ only if BOTH passed AND branch is main
                             ▼
@@ -737,6 +737,8 @@ Firestore also keeps a local cache, so the app can show data offline and queue w
 Use `FieldValue.serverTimestamp()` for `createdAt` and `updatedAt`, not `DateTime.now()`. Device clocks are often wrong, and a rule can check that the client didn't fake the value.
 
 A **due date** is different: it's a calendar day, not a moment. A `Timestamp` is always a moment, so "due Friday" is stored as midnight UTC on Friday (`dueDateToFirestore` in [`task_firestore.dart`](lib/features/tasks/data/task_firestore.dart)) and read back by taking that UTC date's year, month and day. Storing local midnight instead would make the task due on Thursday for someone further west. Comparisons ("overdue", "in 3 days") use `daysUntil` in [`due_date.dart`](lib/features/tasks/domain/due_date.dart), which counts calendar days, so a daylight-saving change can't make a day 23 hours long.
+
+A task also has **`completedAt`**, a server timestamp like `updatedAt`, set when the status becomes Complete and set back to null when the task is reopened (`_completedAt` in [`task_repository.dart`](lib/features/tasks/data/task_repository.dart)). `updatedAt` can't stand in for it: renaming a task finished last month would make it look finished today. The rules keep the two in step, allowing `completedAt` only while the status is `complete`, so every write that changes the status has to write `completedAt` too. Home's "done in the last 7 days" counts by the local calendar day of that moment ([`task_stats.dart`](lib/features/tasks/domain/task_stats.dart)).
 
 ### Lists inside a document
 

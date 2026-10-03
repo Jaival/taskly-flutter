@@ -402,6 +402,21 @@ describe('project tasks', () => {
       checklist: [{ text: 'Step', done: true }],
       updatedAt: serverTimestamp(),
     }));
+    // Completing records when, and reopening clears it.
+    await assertSucceeds(updateDoc(doc(db, 'projects/p1/tasks/t1'), {
+      status: 'complete',
+      completedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    }));
+    await assertFails(updateDoc(doc(db, 'projects/p1/tasks/t1'), {
+      status: 'inProgress',
+      updatedAt: serverTimestamp(),
+    }));
+    await assertSucceeds(updateDoc(doc(db, 'projects/p1/tasks/t1'), {
+      status: 'inProgress',
+      completedAt: null,
+      updatedAt: serverTimestamp(),
+    }));
   });
 
   test('editors can delete tasks, viewers cannot', async () => {
@@ -431,6 +446,35 @@ describe('personal tasks', () => {
     // Older tasks have no checklist at all, and stay valid.
     await assertSucceeds(updateDoc(doc(db, 'tasks/personal1'), {
       title: 'Renamed',
+      updatedAt: serverTimestamp(),
+    }));
+  });
+
+  test('only a complete task has a completion time', async () => {
+    const db = as('dave');
+    const personal = doc(db, 'tasks/personal1');
+    await assertFails(updateDoc(personal, {
+      completedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    }));
+    await assertFails(updateDoc(personal, {
+      status: 'complete',
+      completedAt: 'yesterday',
+      updatedAt: serverTimestamp(),
+    }));
+    await assertSucceeds(updateDoc(personal, {
+      status: 'complete',
+      completedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    }));
+    // Edited while done: the time stays.
+    await assertSucceeds(updateDoc(personal, {
+      title: 'Renamed',
+      updatedAt: serverTimestamp(),
+    }));
+    // Reopened without clearing it.
+    await assertFails(updateDoc(personal, {
+      status: 'notStarted',
       updatedAt: serverTimestamp(),
     }));
   });

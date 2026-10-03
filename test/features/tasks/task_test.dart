@@ -102,4 +102,27 @@ void main() {
     final old = (await personalTasksCollection(db).doc('t2').get()).data()!;
     expect(old.checklist, isEmpty);
   });
+
+  test('the completion time round-trips, and is null on older tasks', () async {
+    final ref = personalTasksCollection(db).doc('t1');
+    final completedAt = DateTime(2026, 9, 28, 14, 30);
+    await ref.set(
+      Task(
+        id: 't1',
+        ownerId: 'alice',
+        title: 'Done',
+        status: TaskStatus.complete,
+        completedAt: completedAt,
+      ),
+    );
+    expect((await ref.get()).data()!.completedAt, completedAt);
+
+    await db.doc('tasks/t2').set({
+      'ownerId': 'alice',
+      'title': 'y',
+      'status': 'complete',
+    });
+    final old = (await personalTasksCollection(db).doc('t2').get()).data()!;
+    expect(old.completedAt, isNull);
+  });
 }

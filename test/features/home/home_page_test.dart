@@ -22,6 +22,7 @@ void main() {
     String status = 'notStarted',
     double order = 1,
     int? dueInDays,
+    int? doneDaysAgo,
   }) => firestore.doc('tasks/$id').set({
     'ownerId': testUser.uid,
     'title': title,
@@ -33,6 +34,11 @@ void main() {
     'order': order,
     'createdAt': Timestamp.now(),
     'updatedAt': Timestamp.now(),
+    'completedAt': doneDaysAgo == null
+        ? null
+        : Timestamp.fromDate(
+            DateTime.now().subtract(Duration(days: doneDaysAgo)),
+          ),
   });
 
   Future<void> seedProject(String id, {required String name, int day = 1}) =>
@@ -191,15 +197,17 @@ void main() {
     }
     await pumpHome(tester);
 
-    expect(find.text('Project 5'), findsOneWidget);
-    expect(find.text('Project 2'), findsOneWidget);
-    expect(find.text('Project 1'), findsNothing);
-
+    // The fourth and last of them, at the bottom of the page.
     await tester.scrollUntilVisible(
-      find.text('Project 5'),
+      find.text('Project 2'),
       100,
       scrollable: homeScrollable,
     );
+    expect(find.text('Project 5'), findsOneWidget);
+    expect(find.text('Project 1'), findsNothing);
+
+    await tester.ensureVisible(find.text('Project 5'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Project 5'));
     await tester.pumpAndSettle();
     expect(find.byType(ProjectDetailPage), findsOneWidget);
@@ -219,10 +227,94 @@ void main() {
     expect(find.widgetWithText(TaskCard, 'A'), findsNothing);
   });
 
+  group('progress', () {
+    Future<void> seedDone(String id, {required int daysAgo}) => seedTask(
+      id,
+      title: 'Done $id',
+      status: 'complete',
+      doneDaysAgo: daysAgo,
+    );
+
+    testWidgets('counts what was done in the last 7 days, by day', (
+      tester,
+    ) async {
+      await seedDone('a', daysAgo: 0);
+      await seedDone('b', daysAgo: 0);
+      await seedDone('c', daysAgo: 1);
+      await seedDone('d', daysAgo: 30);
+      await seedTask('e', title: 'Open');
+      await pumpHome(tester);
+
+      expect(
+        find.bySemanticsLabel('3 tasks done in the last 7 days'),
+        findsOneWidget,
+      );
+      expect(find.bySemanticsLabel('1 yesterday, 2 today'), findsOneWidget);
+      // All of them are still Done, however long ago.
+      expect(statCard('Done', 4), findsOneWidget);
+      expect(find.text('Nothing overdue'), findsOneWidget);
+    });
+
+    testWidgets('ticking a task off adds it to today', (tester) async {
+      await seedTask('a', title: 'Buy milk');
+      await pumpHome(tester);
+      expect(
+        find.bySemanticsLabel('0 tasks done in the last 7 days'),
+        findsOneWidget,
+      );
+
+      await tester.tap(
+        find.descendant(
+          of: find.widgetWithText(TaskCard, 'Buy milk'),
+          matching: find.byType(Checkbox),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.bySemanticsLabel('1 task done in the last 7 days'),
+        findsOneWidget,
+      );
+      expect(find.bySemanticsLabel('1 today'), findsOneWidget);
+    });
+
+    testWidgets('the overdue count opens the overdue tasks', (tester) async {
+      await seedTask('a', title: 'Late', dueInDays: -2);
+      await seedTask('b', title: 'Later', dueInDays: -9, order: 2);
+      await seedTask('c', title: 'Soon', dueInDays: 3, order: 3);
+      await seedTask(
+        'd',
+        title: 'Was late',
+        dueInDays: -2,
+        status: 'complete',
+        doneDaysAgo: 0,
+      );
+      await pumpHome(tester);
+
+      await tester.tap(find.text('2 overdue'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TasksPage), findsOneWidget);
+      expect(find.text('Showing 2 of 4 tasks'), findsOneWidget);
+      expect(find.widgetWithText(TaskCard, 'Late'), findsOneWidget);
+      expect(find.widgetWithText(TaskCard, 'Soon'), findsNothing);
+    });
+  });
+
   for (final size in [const Size(360, 640), const Size(1400, 900)]) {
     testWidgets('lays out without overflow at ${size.width}px', (tester) async {
       await seedProject('p1', name: 'A project with a rather long name');
       await seedTask('a', title: 'A task with a rather long title too');
+      await seedTask('late', title: 'Late', dueInDays: -1, order: 2);
+      for (var day = 0; day < 7; day++) {
+        await seedTask(
+          'done$day',
+          title: 'Done',
+          status: 'complete',
+          doneDaysAgo: day,
+          order: 3,
+        );
+      }
       await pumpHome(tester, size: size);
 
       expect(tester.takeException(), isNull);

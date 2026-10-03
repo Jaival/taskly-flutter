@@ -5,6 +5,7 @@ import 'package:taskly/core/domain/priority.dart';
 import 'package:taskly/core/domain/task_status.dart';
 import 'package:taskly/features/tasks/data/task_repository.dart';
 import 'package:taskly/features/tasks/domain/checklist_item.dart';
+import 'package:taskly/features/tasks/domain/task.dart';
 
 void main() {
   late FakeFirebaseFirestore db;
@@ -86,7 +87,7 @@ void main() {
     expect(saved.assigneeId, 'bob');
   });
 
-  test('setStatus changes only the status and updatedAt', () async {
+  test('setStatus changes only the status and its times', () async {
     await repository.createTask(ownerId: 'alice', title: 'x');
     final task = (await repository.watchPersonalTasks('alice').first).single;
     final before = (await db.doc('tasks/${task.id}').get()).data()!;
@@ -101,8 +102,64 @@ void main() {
     };
     expect(after['status'], 'complete');
     expect(changed, contains('status'));
-    expect(changed.difference({'status', 'updatedAt'}), isEmpty);
+    expect(changed.difference({'status', 'completedAt', 'updatedAt'}), isEmpty);
     expect(after['updatedAt'], isA<Timestamp>());
+  });
+
+  group('the completion time', () {
+    Future<Task> onlyTask() async =>
+        (await repository.watchPersonalTasks('alice').first).single;
+
+    Future<void> edit(Task task, {required TaskStatus status}) =>
+        repository.updateDetails(
+          task,
+          title: 'Renamed',
+          description: '',
+          priority: Priority.medium,
+          status: status,
+          dueDate: null,
+        );
+
+    test('is set on completing, and cleared on reopening', () async {
+      await repository.createTask(ownerId: 'alice', title: 'x');
+      expect((await onlyTask()).completedAt, isNull);
+
+      await repository.setStatus(await onlyTask(), TaskStatus.complete);
+      expect((await onlyTask()).completedAt, isNotNull);
+
+      await repository.setStatus(await onlyTask(), TaskStatus.inProgress);
+      final saved = (await db.collection('tasks').get()).docs.single.data();
+      // Null, not missing: the rules want it cleared.
+      expect(saved, containsPair('completedAt', null));
+    });
+
+    test('follows the status chosen in the form', () async {
+      await repository.createTask(ownerId: 'alice', title: 'x');
+
+      await edit(await onlyTask(), status: TaskStatus.complete);
+      expect((await onlyTask()).completedAt, isNotNull);
+
+      await edit(await onlyTask(), status: TaskStatus.notStarted);
+      expect((await onlyTask()).completedAt, isNull);
+    });
+
+    test('stays when a done task is edited or completed again', () async {
+      final completedAt = Timestamp.fromDate(DateTime(2026, 8, 20, 9));
+      await db.doc('tasks/t1').set({
+        'ownerId': 'alice',
+        'title': 'x',
+        'status': 'complete',
+        'completedAt': completedAt,
+        'order': 1,
+      });
+
+      await edit(await onlyTask(), status: TaskStatus.complete);
+      await repository.setStatus(await onlyTask(), TaskStatus.complete);
+
+      final saved = (await db.doc('tasks/t1').get()).data()!;
+      expect(saved['title'], 'Renamed');
+      expect(saved['completedAt'], completedAt);
+    });
   });
 
   test('deleteTask deletes the right document', () async {
