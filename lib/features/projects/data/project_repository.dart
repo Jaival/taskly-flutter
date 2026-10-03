@@ -147,7 +147,7 @@ final projectRepositoryProvider = Provider<ProjectRepository>(
 
 /// The signed-in user's projects.
 final projectsProvider = StreamProvider<List<Project>>((ref) {
-  final uid = ref.watch(authStateProvider.select((user) => user.value?.uid));
+  final uid = ref.watch(currentUserProvider.select((user) => user?.uid));
   if (uid == null) return Stream.value(const []);
   return ref.watch(projectRepositoryProvider).watchProjects(uid);
 });
@@ -163,7 +163,7 @@ final projectProvider = StreamProvider.autoDispose.family<Project?, String>((
   id,
 ) {
   ref
-    ..watch(authStateProvider.select((user) => user.value?.uid))
+    ..watch(currentUserProvider.select((user) => user?.uid))
     ..watch(
       projectsProvider.select(
         (projects) => projects.value?.any((project) => project.id == id),

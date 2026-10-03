@@ -40,7 +40,7 @@ class HomePage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final user = ref.watch(authStateProvider).value;
+    final user = ref.watch(currentUserProvider);
     final hidden = ref.watch(pendingDeletionsProvider);
     final tasks = ref
         .watch(myTasksProvider)

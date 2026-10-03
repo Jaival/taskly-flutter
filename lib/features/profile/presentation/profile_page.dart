@@ -25,7 +25,7 @@ class ProfilePage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     // The router only shows this page to signed-in users, but for a moment
     // after signing out there's no user while the redirect happens.
-    final user = ref.watch(authStateProvider).value;
+    final user = ref.watch(currentUserProvider);
 
     return Scaffold(
       appBar: AppBar(

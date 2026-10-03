@@ -49,8 +49,7 @@ class _DeleteAccountDialogState extends ConsumerState<_DeleteAccountDialog> {
   String? _error;
 
   /// False for someone who signs in with Google, who confirms that way.
-  bool get _hasPassword =>
-      ref.read(authStateProvider).value?.hasPassword ?? true;
+  bool get _hasPassword => ref.read(currentUserProvider)?.hasPassword ?? true;
 
   @override
   void dispose() {
@@ -91,7 +90,7 @@ class _DeleteAccountDialogState extends ConsumerState<_DeleteAccountDialog> {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final uid = ref.watch(authStateProvider).value?.uid;
+    final uid = ref.watch(currentUserProvider)?.uid;
     final owned = [
       for (final project
           in ref.watch(projectsProvider).value ?? const <Project>[])

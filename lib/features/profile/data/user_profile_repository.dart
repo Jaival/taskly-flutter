@@ -67,6 +67,6 @@ final userProfileRepositoryProvider = Provider<UserProfileRepository>(
 /// kills the listener.
 final userProfileProvider = StreamProvider.autoDispose
     .family<UserProfile?, String>((ref, uid) {
-      ref.watch(authStateProvider.select((user) => user.value?.uid));
+      ref.watch(currentUserProvider.select((user) => user?.uid));
       return ref.watch(userProfileRepositoryProvider).watchProfile(uid);
     });

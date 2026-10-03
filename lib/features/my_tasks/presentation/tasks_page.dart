@@ -77,7 +77,7 @@ class _FilteredTasks extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final filter = ref.watch(taskFilterProvider);
-    final uid = ref.watch(authStateProvider).value?.uid ?? '';
+    final uid = ref.watch(currentUserProvider)?.uid ?? '';
     final projects = ref.watch(projectsProvider).value ?? const [];
     final today = DateTime.now();
     final shown = filter.apply(items, today);

@@ -117,8 +117,8 @@ final inviteRepositoryProvider = Provider<InviteRepository>(
 /// verified their email, since an unverified address can't claim invites.
 final receivedInvitesProvider = StreamProvider<List<Invite>>((ref) {
   final email = ref.watch(
-    authStateProvider.select(
-      (user) => switch (user.value) {
+    currentUserProvider.select(
+      (user) => switch (user) {
         final user? when user.emailVerified => user.email,
         _ => null,
       },
@@ -131,9 +131,7 @@ final receivedInvitesProvider = StreamProvider<List<Invite>>((ref) {
 /// Invites the signed-in user sent for a project and nobody has accepted.
 final sentInvitesProvider = StreamProvider.autoDispose
     .family<List<Invite>, String>((ref, projectId) {
-      final uid = ref.watch(
-        authStateProvider.select((user) => user.value?.uid),
-      );
+      final uid = ref.watch(currentUserProvider.select((user) => user?.uid));
       if (uid == null) return Stream.value(const []);
       return ref
           .watch(inviteRepositoryProvider)

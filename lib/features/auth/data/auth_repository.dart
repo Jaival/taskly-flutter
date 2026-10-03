@@ -185,3 +185,17 @@ final authRepositoryProvider = Provider<AuthRepository>(
 final authStateProvider = StreamProvider<AppUser?>(
   (ref) => ref.watch(authRepositoryProvider).userChanges(),
 );
+
+/// The signed-in user as far as is known right now; null when signed out.
+/// Read the user through this rather than [authStateProvider].
+///
+/// [authStateProvider] is "loading" until its stream's first event, even
+/// though `main` has already waited for the saved session. Asking the
+/// repository in the meantime means everything that loads a user's data
+/// starts with the right user, instead of behaving for a moment as if
+/// nobody were signed in (and showing empty lists while the real ones load).
+final currentUserProvider = Provider<AppUser?>((ref) {
+  final repository = ref.watch(authRepositoryProvider);
+  final state = ref.watch(authStateProvider);
+  return state.hasValue ? state.value : repository.currentUser;
+});

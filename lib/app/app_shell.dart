@@ -175,7 +175,7 @@ class _AccountMenu extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final user = ref.watch(authStateProvider).value;
+    final user = ref.watch(currentUserProvider);
     final theme = Theme.of(context);
 
     return MenuAnchor(

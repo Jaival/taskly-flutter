@@ -16,7 +16,7 @@ Future<void> showNewProjectTaskForm(
   WidgetRef ref,
   String projectId,
 ) async {
-  final uid = ref.read(authStateProvider).value?.uid ?? '';
+  final uid = ref.read(currentUserProvider)?.uid ?? '';
   final project = ref.read(projectProvider(projectId)).value;
   if (project == null || !project.canEdit(uid)) return;
   await showTaskForm(

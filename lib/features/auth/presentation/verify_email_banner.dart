@@ -41,7 +41,7 @@ class _VerifyEmailBannerState extends ConsumerState<VerifyEmailBanner> {
 
   @override
   Widget build(BuildContext context) {
-    final user = ref.watch(authStateProvider).value;
+    final user = ref.watch(currentUserProvider);
     final show = user != null && !user.emailVerified;
 
     return TopBanner(banner: show ? _banner(user) : null, child: widget.child);

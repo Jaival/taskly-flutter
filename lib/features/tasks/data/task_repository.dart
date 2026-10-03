@@ -285,7 +285,7 @@ final taskRepositoryProvider = Provider<TaskRepository>(
 
 /// The signed-in user's personal tasks.
 final personalTasksProvider = StreamProvider<List<Task>>((ref) {
-  final uid = ref.watch(authStateProvider.select((user) => user.value?.uid));
+  final uid = ref.watch(currentUserProvider.select((user) => user?.uid));
   if (uid == null) return Stream.value(const []);
   return ref.watch(taskRepositoryProvider).watchPersonalTasks(uid);
 });
@@ -296,7 +296,7 @@ final personalTasksProvider = StreamProvider<List<Task>>((ref) {
 /// listener the rules denied (after leaving, or signing out) isn't reused.
 final projectTasksProvider = StreamProvider.autoDispose
     .family<List<Task>, String>((ref, projectId) {
-      ref.watch(authStateProvider.select((user) => user.value?.uid));
+      ref.watch(currentUserProvider.select((user) => user?.uid));
       return ref.watch(taskRepositoryProvider).watchProjectTasks(projectId);
     });
 
@@ -307,9 +307,7 @@ final projectTasksProvider = StreamProvider.autoDispose
 /// [projectTasksProvider].
 final assignedTasksProvider = StreamProvider.autoDispose
     .family<List<Task>, String>((ref, projectId) {
-      final uid = ref.watch(
-        authStateProvider.select((user) => user.value?.uid),
-      );
+      final uid = ref.watch(currentUserProvider.select((user) => user?.uid));
       if (uid == null) return Stream.value(const []);
       return ref
           .watch(taskRepositoryProvider)
@@ -325,7 +323,7 @@ typedef ProjectTaskRef = ({String projectId, String taskId});
 /// [projectTasksProvider].
 final taskActivityProvider = StreamProvider.autoDispose
     .family<List<TaskActivity>, ProjectTaskRef>((ref, task) {
-      ref.watch(authStateProvider.select((user) => user.value?.uid));
+      ref.watch(currentUserProvider.select((user) => user?.uid));
       return ref
           .watch(taskRepositoryProvider)
           .watchActivity(task.projectId, task.taskId);

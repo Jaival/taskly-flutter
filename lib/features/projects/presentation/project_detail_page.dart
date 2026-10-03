@@ -32,7 +32,7 @@ class ProjectDetailPage extends ConsumerWidget {
         (keys) => keys.contains(projectDeletionKey(projectId)),
       ),
     );
-    final uid = ref.watch(authStateProvider).value?.uid ?? '';
+    final uid = ref.watch(currentUserProvider)?.uid ?? '';
 
     return PageTitle(
       switch (project) {
@@ -88,7 +88,7 @@ class _ProjectDetails extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final uid = ref.watch(authStateProvider).value?.uid ?? '';
+    final uid = ref.watch(currentUserProvider)?.uid ?? '';
     final members = watchMembers(ref, project);
 
     final tasks = ProjectTaskList(

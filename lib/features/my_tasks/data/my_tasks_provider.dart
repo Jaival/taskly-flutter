@@ -51,7 +51,7 @@ final taskFilterProvider = NotifierProvider<TaskFilterNotifier, TaskFilter>(
 class TaskFilterNotifier extends Notifier<TaskFilter> {
   @override
   TaskFilter build() {
-    ref.watch(authStateProvider.select((user) => user.value?.uid));
+    ref.watch(currentUserProvider.select((user) => user?.uid));
     return const TaskFilter();
   }
 

@@ -20,7 +20,7 @@ class SharedPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final user = ref.watch(authStateProvider).value;
+    final user = ref.watch(currentUserProvider);
     final uid = user?.uid;
     final invites = ref.watch(receivedInvitesProvider);
     final projects = ref

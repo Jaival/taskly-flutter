@@ -169,7 +169,7 @@ class _TaskActivitySheetState extends ConsumerState<TaskActivitySheet> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final task = widget.task;
-    final uid = ref.watch(authStateProvider.select((user) => user.value?.uid));
+    final uid = ref.watch(currentUserProvider.select((user) => user?.uid));
     final activity = ref.watch(
       taskActivityProvider((projectId: task.projectId!, taskId: task.id)),
     );

@@ -305,6 +305,13 @@ final authRepositoryProvider = Provider<AuthRepository>(
 final authStateProvider = StreamProvider<AppUser?>(
   (ref) => ref.watch(authRepositoryProvider).userChanges(),
 );
+
+// Who is signed in, as a plain value. This is the one to read.
+final currentUserProvider = Provider<AppUser?>((ref) {
+  final repository = ref.watch(authRepositoryProvider);
+  final state = ref.watch(authStateProvider);
+  return state.hasValue ? state.value : repository.currentUser;
+});
 ```
 
 Providers can depend on other providers (`ref.watch(authRepositoryProvider)`). That builds a **dependency graph** Riverpod manages for you: no singletons, no passing objects through constructors.
@@ -312,7 +319,7 @@ Providers can depend on other providers (`ref.watch(authRepositoryProvider)`). T
 **`ref.watch` vs `ref.read`.** This is the most important Riverpod rule. From `_AccountMenu` in [`lib/app/app_shell.dart`](lib/app/app_shell.dart):
 
 ```dart
-final user = ref.watch(authStateProvider).value;            // in build(): rebuild when it changes
+final user = ref.watch(currentUserProvider);                 // in build(): rebuild when it changes
 ...
 onPressed: () => ref.read(authRepositoryProvider).signOut(), // in a callback: just get it once
 ```
@@ -323,6 +330,8 @@ onPressed: () => ref.read(authRepositoryProvider).signOut(), // in a callback: j
 | `ref.read` | Button handlers and other callbacks | One-off read, no subscription |
 
 Using `watch` in a callback, or `read` in `build`, is a classic bug.
+
+**Why `currentUserProvider` and not `authStateProvider.value`.** A `StreamProvider` is "loading" until its stream's first event, and while loading `.value` is null. `main()` has already waited for the saved session by then, so "null" was wrong for a moment at every start: each list asked for nobody's data, got an empty list, and Home showed "0 projects" and "No tasks yet." before the real numbers arrived. `currentUserProvider` asks the repository directly until the stream has spoken, so everything starts with the right user and shows its skeleton instead. The general rule: "loading" and "none" are different answers, and `.value` on an `AsyncValue` hides the difference.
 
 **`AsyncValue`.** A `StreamProvider` or `FutureProvider` gives you an `AsyncValue<T>` that is exactly one of loading, data or error. That replaces v1's pattern of `initialData: null` followed by `if (data == null) return Loading();`, which couldn't tell "loading" from "failed" from "empty". From Phase 3 on you'll write:
 
@@ -352,7 +361,7 @@ The fix, in [`project_repository.dart`](lib/features/projects/data/project_repos
 ```dart
 final projectProvider = StreamProvider.autoDispose.family<Project?, String>((ref, id) {
   ref
-    ..watch(authStateProvider.select((user) => user.value?.uid))  // new user: new listener
+    ..watch(currentUserProvider.select((user) => user?.uid))      // new user: new listener
     ..watch(projectsProvider.select(                                // joined or left: new listener
         (projects) => projects.value?.any((project) => project.id == id)));
   return ref.watch(projectRepositoryProvider).watchProject(id)...;
@@ -508,7 +517,7 @@ A key press goes to the widget that has the **focus**, then up through its paren
 
 There are two test suites:
 
-- **Dart tests** (`test/`, 338 tests): run with `flutter test`. Takes a few seconds.
+- **Dart tests** (`test/`, 342 tests): run with `flutter test`. Takes a few seconds.
 - **Security rules tests** (`rules_test/`, 63 tests): run with `npm test` inside `rules_test/`. This starts the Firestore emulator, runs the tests, and stops it. If the emulators are already running (you'd get "port taken"), use them instead: `FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npm run test:only`. The tests load `firestore.rules` fresh each run. See [section 11](#11-firestore-primer-read-before-phase-2).
 
 ### The testing pyramid
@@ -891,6 +900,8 @@ Always run the rules tests first. The Firebase console also has a "Rules Playgro
 | "Couldn't load your tasks." in a browser but not on a phone; the console says `Expandos are not allowed on … null` | On the web, asking a top-level collection for its `parent` throws inside the Firestore plugin (cloud_firestore_web 5.7), where other platforms return null | Already fixed: a task's project comes from its path (`projectIdFromTaskPath`), not from `reference.parent.parent`. Don't call `.parent` on a collection that might be top-level |
 | "That way of signing in isn't enabled for this app yet." after Continue with Google | The Google provider is off in the Firebase console | Section 7, "Turning on Google sign-in" |
 | A form's Save button spins for ever with no connection | A repository write that isn't wrapped in `_saved(...)`, so it waits for the server | Wrap it (section 11, "Working offline") |
+| Lists flash "nothing yet" when the app starts, then fill in | Something reads the user from `authStateProvider`'s `.value`, which is null while the stream is still loading | Read `currentUserProvider` instead (section 5) |
+| Running with the emulators in a browser: you're signed out, a seeded login is "incorrect", and there's no red "Running in emulator mode" strip at the bottom | A new tab that still has a saved emulator session. The auth plugin checks that session against the *real* project before `main()` can point it at the emulator, and then quietly ignores the request to switch. Until the page is reloaded, sign-in and sign-up in that tab go to production | Reload the tab once (the plugin remembers the emulator per tab after the first try). Don't sign up while the red strip is missing |
 | App on the emulator can't reach the Firebase emulators | Emulators not running, or the app was started without the flag | Start them first; run with `--dart-define=USE_FIREBASE_EMULATORS=true` |
 
 ---

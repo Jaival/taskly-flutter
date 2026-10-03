@@ -27,7 +27,7 @@ class ProjectCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final uid = ref.watch(authStateProvider).value?.uid ?? '';
+    final uid = ref.watch(currentUserProvider)?.uid ?? '';
     final others = project.memberIds.length - 1;
     // Listens to the project's tasks; only cards on screen are built.
     final tasks = ref.watch(projectTasksProvider(project.id)).value;
