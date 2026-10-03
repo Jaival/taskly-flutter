@@ -306,7 +306,13 @@ Tier A is what makes this feel like a real product. The rest is optional.
   - "New task" from the calendar starts with the chosen day as its due date.
   - Tasks without a due date can't be on a calendar; a line under it says how many there are.
   - The view and the chosen day are remembered while the app is open, like the filters. Dragging a task to another day isn't there; change its due date in the form.
-- [ ] **Recurring tasks** (daily, weekly).
+- [x] **Recurring tasks** (daily, weekly).
+  - A task with a due date can repeat every day, week or month: the Repeat field under the due date in the task form. The card says so ("Every week").
+  - Each time is a real task. Ticking one off adds the next, a copy with nothing done yet, due a step later, and says when ("Next one added, due Sat, Oct 10."). The schedule moves to the new task, so ticking the old one off again adds nothing.
+  - "A step later" counts from when it was due, not when it was done: a weekly task done two days early still comes back a week after its due date. Done late, the next is the first date still to come, not a pile of missed ones. Monthly on the 31st falls on the last day of shorter months.
+  - Viewers can tick off a repeating task assigned to them, and the next one is added for them too. The rules allow that only as an exact copy of the task they completed, in the same write (devops.md 11, "Recurring tasks").
+  - Not there: stopping at an end date, "every weekday" or "every 2 weeks", and removing the next one when you untick a task by mistake (delete it).
+  - Tried on the Android emulator against the Firebase emulators, as a viewer: the next task was stored with the rules on.
 - [ ] **Labels/tags** with colours.
 - [ ] **AI assist:** "break this task into subtasks" or natural-language quick add ("Finish report by Friday high priority"), via a Cloud Function calling an LLM API. Keep API keys server-side.
 - [x] **Export** to CSV or iCal.

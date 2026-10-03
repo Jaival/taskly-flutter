@@ -12,6 +12,7 @@ import '../data/task_repository.dart';
 import '../domain/task.dart';
 import 'checklist_progress.dart';
 import 'due_date_label.dart';
+import 'repeat_label.dart';
 import 'task_activity_sheet.dart';
 import 'task_form.dart';
 
@@ -56,13 +57,15 @@ class TaskCard extends ConsumerWidget {
     bool complete,
   ) async {
     final messenger = ScaffoldMessenger.of(context);
+    final localizations = MaterialLocalizations.of(context);
     try {
-      await ref
+      final next = await ref
           .read(taskRepositoryProvider)
           .setStatus(
             task,
             complete ? TaskStatus.complete : TaskStatus.notStarted,
           );
+      if (next != null) showNextTaskAdded(messenger, localizations, next);
     } on FirebaseException {
       messenger.showSnackBar(
         SnackBar(content: Text("Couldn't update \"${task.title}\".")),
@@ -160,6 +163,7 @@ class TaskCard extends ConsumerWidget {
                           StatusChip(task.status),
                           if (task.dueDate != null)
                             DueDateLabel(task, today: DateTime.now()),
+                          if (task.repeats) RepeatLabel(task),
                           if (task.checklist.isNotEmpty)
                             ChecklistProgress(task),
                           if (members?[task.assigneeId] case final name?)

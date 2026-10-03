@@ -14,8 +14,10 @@ import '../../auth/data/auth_repository.dart';
 import '../data/task_repository.dart';
 import '../domain/checklist_item.dart';
 import '../domain/task.dart';
+import '../domain/task_repeat.dart';
 import 'checklist_editor.dart';
 import 'due_date_label.dart';
+import 'repeat_label.dart';
 
 /// Opens the form to edit [task], or to add a task to the project with
 /// [projectId] (a personal task if that's null too). Pass the project's
@@ -79,6 +81,7 @@ class _TaskFormState extends ConsumerState<TaskForm> {
     final task? => task.dueDate,
     null => widget.dueDate,
   };
+  late TaskRepeat? _repeat = widget.task?.repeat;
   late List<ChecklistItem> _checklist = widget.task?.checklist ?? const [];
   // Shows _dueDate; the field is read-only and opens a date picker.
   final _dueText = TextEditingController();
@@ -134,9 +137,13 @@ class _TaskFormState extends ConsumerState<TaskForm> {
       _error = null;
     });
     final repository = ref.read(taskRepositoryProvider);
+    final messenger = ScaffoldMessenger.of(context);
+    final localizations = MaterialLocalizations.of(context);
+    // A schedule is counted from the due date, so it goes with it.
+    final repeat = _dueDate == null ? null : _repeat;
     try {
       if (widget.task case final task?) {
-        await repository.updateDetails(
+        final next = await repository.updateDetails(
           task,
           title: _title.text,
           description: _description.text,
@@ -145,7 +152,9 @@ class _TaskFormState extends ConsumerState<TaskForm> {
           dueDate: _dueDate,
           checklist: _checklist,
           assigneeId: widget.members == null ? null : () => _assigneeId,
+          repeat: () => repeat,
         );
+        if (next != null) showNextTaskAdded(messenger, localizations, next);
       } else {
         await repository.createTask(
           projectId: widget.projectId,
@@ -155,6 +164,7 @@ class _TaskFormState extends ConsumerState<TaskForm> {
           priority: _priority,
           assigneeId: _assigneeId,
           dueDate: _dueDate,
+          repeat: repeat,
           checklist: _checklist,
         );
       }
@@ -247,6 +257,29 @@ class _TaskFormState extends ConsumerState<TaskForm> {
                         onPressed: () => _setDue(null),
                       ),
               ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            DropdownButtonFormField<TaskRepeat?>(
+              // Rebuilt when the due date comes or goes, to enable it.
+              key: ValueKey(_dueDate == null),
+              initialValue: _dueDate == null ? null : _repeat,
+              isExpanded: true,
+              decoration: InputDecoration(
+                labelText: 'Repeat',
+                helperText: _dueDate == null
+                    ? 'Pick a due date to repeat the task.'
+                    : _repeat == null
+                    ? null
+                    : 'Completing it adds the next one.',
+              ),
+              items: [
+                const DropdownMenuItem(child: Text("Doesn't repeat")),
+                for (final repeat in TaskRepeat.values)
+                  DropdownMenuItem(value: repeat, child: Text(repeat.label)),
+              ],
+              onChanged: _dueDate == null
+                  ? null
+                  : (value) => setState(() => _repeat = value),
             ),
             if (widget.members case final members?) ...[
               const SizedBox(height: AppSpacing.md),

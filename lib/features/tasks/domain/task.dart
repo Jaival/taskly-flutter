@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../../../core/domain/priority.dart';
 import '../../../core/domain/task_status.dart';
 import 'checklist_item.dart';
+import 'task_repeat.dart';
 
 /// A task, either in a project (`projects/{projectId}/tasks/{id}`) or
 /// personal (`tasks/{id}`).
@@ -18,6 +19,7 @@ class Task {
     this.status = TaskStatus.notStarted,
     this.assigneeId,
     this.dueDate,
+    this.repeat,
     this.checklist = const [],
     this.order = 0,
     this.createdAt,
@@ -40,6 +42,13 @@ class Task {
   final TaskStatus status;
   final String? assigneeId;
   final DateTime? dueDate;
+
+  /// How often the task comes round again, or null if it doesn't. Counted
+  /// from [dueDate], so it means nothing without one: see [repeats].
+  final TaskRepeat? repeat;
+
+  /// Whether completing the task adds the next one.
+  bool get repeats => repeat != null && dueDate != null;
 
   /// Smaller steps inside the task, in order.
   final List<ChecklistItem> checklist;
@@ -73,6 +82,7 @@ class Task {
     TaskStatus? status,
     ValueGetter<String?>? assigneeId,
     ValueGetter<DateTime?>? dueDate,
+    ValueGetter<TaskRepeat?>? repeat,
     List<ChecklistItem>? checklist,
     double? order,
   }) => Task(
@@ -85,6 +95,7 @@ class Task {
     status: status ?? this.status,
     assigneeId: assigneeId != null ? assigneeId() : this.assigneeId,
     dueDate: dueDate != null ? dueDate() : this.dueDate,
+    repeat: repeat != null ? repeat() : this.repeat,
     checklist: checklist ?? this.checklist,
     order: order ?? this.order,
     createdAt: createdAt,
@@ -104,6 +115,7 @@ class Task {
       other.status == status &&
       other.assigneeId == assigneeId &&
       other.dueDate == dueDate &&
+      other.repeat == repeat &&
       listEquals(other.checklist, checklist) &&
       other.order == order &&
       other.createdAt == createdAt &&
@@ -121,6 +133,7 @@ class Task {
     status,
     assigneeId,
     dueDate,
+    repeat,
     Object.hashAll(checklist),
     order,
     createdAt,

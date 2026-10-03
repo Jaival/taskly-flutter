@@ -249,16 +249,46 @@ service cloud.firestore {
               || hasValidAssignee(incoming());
         }
 
+        function taskPath(id) {
+          return /databases/$(database)/documents/projects/$(projectId)/tasks/$(id);
+        }
+
+        // The next task in a series, added by a viewer when they complete
+        // the one before (the app adds it in the same batch). Only the task
+        // they were assigned, only once (completing it takes the schedule
+        // off it), and only a copy of it, still theirs and not started.
+        function isNextInSeries() {
+          let before = get(taskPath(incoming().repeatedFrom)).data;
+          let after = getAfter(taskPath(incoming().repeatedFrom)).data;
+          return isProjectMember()
+              && incoming().repeatedFrom is string
+              && before.assigneeId == uid()
+              && before.status != 'complete'
+              && before.get('repeat', null) != null
+              && after.status == 'complete'
+              && after.get('repeat', null) == null
+              && incoming().assigneeId == uid()
+              && incoming().status == 'notStarted'
+              && incoming().get('completedAt', null) == null
+              && incoming().repeat == before.repeat
+              && incoming().title == before.title
+              && incoming().description == before.description
+              && incoming().priority == before.priority
+              && incoming().get('checklist', []).size()
+                   == before.get('checklist', []).size();
+        }
+
         allow read: if isProjectMember();
 
-        allow create: if canEditProject()
+        allow create: if (canEditProject() || isNextInSeries())
             && incoming().ownerId == uid()
             && isValidTask(incoming())
             && hasValidAssignee(incoming())
             && hasCreateTimestamps();
 
         // Editors can change anything but the creator. Viewers can only move
-        // their own assigned tasks through the workflow.
+        // their own assigned tasks through the workflow, and stop one
+        // repeating as they complete it (the next one takes the schedule).
         allow update: if (
               canEditProject()
               && incoming().ownerId == resource.data.ownerId
@@ -268,7 +298,11 @@ service cloud.firestore {
             ) || (
               isProjectMember()
               && resource.data.assigneeId == uid()
-              && changedKeys().hasOnly(['status', 'completedAt', 'updatedAt'])
+              && changedKeys().hasOnly(
+                   ['status', 'completedAt', 'repeat', 'updatedAt'])
+              && (!changedKeys().hasAny(['repeat'])
+                  || (incoming().repeat == null
+                      && incoming().status == 'complete'))
               && isValidStatus(incoming().status)
               && hasValidCompletedAt(incoming())
               && incoming().updatedAt == request.time
@@ -300,13 +334,23 @@ service cloud.firestore {
           allow read: if isProjectMember();
 
           // Every member can comment. Besides that, a viewer can only log
-          // the one change a viewer can make: a task's status. The task must
-          // exist once the write is done, so entries can't pile up under
-          // tasks that were deleted or never created.
+          // the changes a viewer can make: a task's status, and adding the
+          // next task in a series they were assigned. The task must exist
+          // once the write is done, so entries can't pile up under tasks
+          // that were deleted or never created.
+          function isLoggingNextInSeries() {
+            let task = getAfter(taskPath(taskId)).data;
+            return incoming().kind == 'created'
+                && task.get('repeatedFrom', null) != null
+                && task.ownerId == uid();
+          }
+
           allow create: if isProjectMember()
               && isValidEntry(incoming())
-              && (incoming().kind in ['comment', 'status'] || canEditProject())
-              && existsAfter(/databases/$(database)/documents/projects/$(projectId)/tasks/$(taskId));
+              && (incoming().kind in ['comment', 'status']
+                  || canEditProject()
+                  || isLoggingNextInSeries())
+              && existsAfter(taskPath(taskId));
 
           allow update: if false;
 
@@ -324,8 +368,9 @@ service cloud.firestore {
     // Shape every stored task must satisfy, personal or in a project.
     function isValidTask(data) {
       return data.keys().hasOnly(['ownerId', 'title', 'description',
-               'priority', 'status', 'assigneeId', 'dueDate', 'checklist',
-               'order', 'createdAt', 'updatedAt', 'completedAt'])
+               'priority', 'status', 'assigneeId', 'dueDate', 'repeat',
+               'repeatedFrom', 'checklist', 'order', 'createdAt', 'updatedAt',
+               'completedAt'])
           && data.title is string
           && data.title.size() > 0 && data.title.size() <= 200
           && data.description is string && data.description.size() <= 5000
@@ -334,6 +379,10 @@ service cloud.firestore {
           && (data.get('assigneeId', null) == null
               || data.assigneeId is string)
           && (data.get('dueDate', null) == null || data.dueDate is timestamp)
+          && data.get('repeat', null) in [null, 'daily', 'weekly', 'monthly']
+          // The task this one follows on from, in a series.
+          && (data.get('repeatedFrom', null) == null
+              || data.repeatedFrom is string)
           // Rules can't loop over a list, so only its size is checked; the
           // app skips items of the wrong shape when reading.
           && (data.get('checklist', []) is list

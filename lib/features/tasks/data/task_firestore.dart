@@ -5,6 +5,7 @@ import '../../../core/domain/priority.dart';
 import '../../../core/domain/task_status.dart';
 import '../domain/checklist_item.dart';
 import '../domain/task.dart';
+import '../domain/task_repeat.dart';
 
 /// Tasks in one project: `projects/{projectId}/tasks`.
 CollectionReference<Task> projectTasksCollection(
@@ -41,6 +42,7 @@ Task taskFromFirestore(
       null => null,
       final utc => DateTime(utc.year, utc.month, utc.day),
     },
+    repeat: TaskRepeat.fromName(data['repeat']),
     checklist: checklistFromFirestore(data['checklist']),
     order: data.number('order'),
     createdAt: data.dateTime('createdAt'),
@@ -70,6 +72,7 @@ Map<String, Object?> taskToFirestore(Task task, SetOptions? _) => {
   'status': task.status.name,
   'assigneeId': task.assigneeId,
   'dueDate': dueDateToFirestore(task.dueDate),
+  'repeat': task.repeat?.name,
   'checklist': checklistToFirestore(task.checklist),
   'order': task.order,
   'createdAt': createdAtValue(task.createdAt),

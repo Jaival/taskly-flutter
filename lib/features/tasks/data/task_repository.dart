@@ -11,6 +11,7 @@ import '../../auth/domain/app_user.dart';
 import '../domain/checklist_item.dart';
 import '../domain/task.dart';
 import '../domain/task_activity.dart';
+import '../domain/task_repeat.dart';
 import 'task_activity_firestore.dart';
 import 'task_firestore.dart';
 
@@ -80,6 +81,7 @@ class TaskRepository {
     Priority priority = Priority.medium,
     String? assigneeId,
     DateTime? dueDate,
+    TaskRepeat? repeat,
     List<ChecklistItem> checklist = const [],
   }) async {
     final doc = _collection(projectId).doc();
@@ -95,6 +97,7 @@ class TaskRepository {
           priority: priority,
           assigneeId: assigneeId,
           dueDate: dueDate,
+          repeat: repeat,
           checklist: _tidy(checklist),
           // Later tasks sort after earlier ones, without reading the list to
           // find the current last position.
@@ -108,7 +111,13 @@ class TaskRepository {
 
   /// Changes the content fields only, so an out-of-date copy can't undo
   /// someone else's change to the other fields.
-  Future<void> updateDetails(
+  ///
+  /// [assigneeId] and [repeat] are only changed when given: `() => null`
+  /// unassigns, or stops the task repeating.
+  ///
+  /// Like [setStatus], returns when the next one is due if this completes a
+  /// task that repeats.
+  Future<DateTime?> updateDetails(
     Task task, {
     required String title,
     required String description,
@@ -117,9 +126,22 @@ class TaskRepository {
     required DateTime? dueDate,
     List<ChecklistItem>? checklist,
     ValueGetter<String?>? assigneeId,
-  }) {
+    ValueGetter<TaskRepeat?>? repeat,
+  }) async {
     final newTitle = title.trim();
     final newDescription = description.trim();
+    final newChecklist = checklist == null ? null : _tidy(checklist);
+    // The task as it will be, for the next one if it repeats.
+    final edited = task.copyWith(
+      title: newTitle,
+      description: newDescription,
+      priority: priority,
+      dueDate: () => dueDate,
+      checklist: newChecklist,
+      assigneeId: assigneeId,
+      repeat: repeat,
+    );
+    final next = _nextIfCompleting(edited, status);
     final batch = _db.batch()
       ..update(_doc(task), {
         'title': newTitle,
@@ -128,10 +150,13 @@ class TaskRepository {
         'status': status.name,
         ..._completedAt(task, status),
         'dueDate': dueDateToFirestore(dueDate),
-        if (checklist != null)
-          'checklist': checklistToFirestore(_tidy(checklist)),
-        // Only when given: personal tasks have no assignee field in the
-        // form. `() => null` unassigns.
+        if (next != null)
+          'repeat': null
+        else if (repeat != null)
+          'repeat': repeat()?.name,
+        if (newChecklist != null)
+          'checklist': checklistToFirestore(newChecklist),
+        // Personal tasks have no assignee field in the form.
         if (assigneeId != null) 'assigneeId': assigneeId(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
@@ -146,22 +171,81 @@ class TaskRepository {
       if (newDue != dueDateActivityValue(task.dueDate))
         ActivityKind.dueDate: newDue,
     });
-    return _saved(batch.commit());
+    if (next != null) _addNext(batch, edited, next);
+    await _saved(batch.commit());
+    return next;
   }
 
   /// Changes only the status. The rules let viewers do this, but nothing
   /// else, on tasks assigned to them.
-  Future<void> setStatus(Task task, TaskStatus status) {
+  ///
+  /// Completing a task that repeats also adds the next one. Returns when
+  /// that one is due, or null if there isn't one.
+  Future<DateTime?> setStatus(Task task, TaskStatus status) async {
+    final next = _nextIfCompleting(task, status);
     final batch = _db.batch()
       ..update(_doc(task), {
         'status': status.name,
         ..._completedAt(task, status),
+        if (next != null) 'repeat': null,
         'updatedAt': FieldValue.serverTimestamp(),
       });
     if (status != task.status) {
       _log(batch, task.projectId, task.id, {ActivityKind.status: status.name});
     }
-    return _saved(batch.commit());
+    if (next != null) _addNext(batch, task, next);
+    await _saved(batch.commit());
+    return next;
+  }
+
+  /// When the task after [task] is due, if moving [task] to [status]
+  /// completes a task that repeats. Null otherwise.
+  DateTime? _nextIfCompleting(Task task, TaskStatus status) {
+    final (repeat, due) = (task.repeat, task.dueDate);
+    if (status != TaskStatus.complete || task.isComplete) return null;
+    if (repeat == null || due == null) return null;
+    return repeat.next(due, _clock());
+  }
+
+  /// Adds the task that follows [task] in its series, due on [due], to
+  /// [batch]: the same task with nothing done yet.
+  ///
+  /// The schedule moves to the new task. The caller takes it off [task] in
+  /// the same batch, so ticking that one off a second time can't add
+  /// another.
+  void _addNext(WriteBatch batch, Task task, DateTime due) {
+    final author = _currentUser();
+    final doc = _collection(task.projectId).doc();
+    batch.set(
+      // Without the converter, for the one field that isn't on [Task].
+      _db.doc(doc.path),
+      {
+        ...taskToFirestore(
+          Task(
+            id: doc.id,
+            projectId: task.projectId,
+            // Whoever ticked the last one off made this one. The rules only
+            // let people create tasks as themselves.
+            ownerId: author?.uid ?? task.ownerId,
+            title: task.title,
+            description: task.description,
+            priority: task.priority,
+            assigneeId: task.assigneeId,
+            dueDate: due,
+            repeat: task.repeat,
+            checklist: [
+              for (final item in task.checklist) item.copyWith(done: false),
+            ],
+            order: _clock().millisecondsSinceEpoch.toDouble(),
+          ),
+          null,
+        ),
+        // Lets the rules check that a viewer who adds a task is only
+        // continuing a series they were assigned.
+        'repeatedFrom': task.id,
+      },
+    );
+    _log(batch, task.projectId, doc.id, {ActivityKind.created: ''});
   }
 
   /// Deletes the task, and its comments and activity with it: Firestore

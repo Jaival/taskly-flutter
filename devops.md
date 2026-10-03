@@ -889,6 +889,18 @@ A task also has **`completedAt`**, a server timestamp like `updatedAt`, set when
 
 A task's **checklist** is a list of `{text, done}` maps in the task document itself, not a subcollection. It's small, it's only ever shown with its task, and one document means one read, one listener and no extra rules. The costs: the whole list is rewritten on every change (two people editing the same checklist at once: the last save wins), and a document can't grow past 1 MB, so the rules cap the list at 50 items. Something that grows without limit or is queried on its own belongs in a subcollection, which is where a task's comments are.
 
+### Recurring tasks
+
+A repeating task isn't one task with a list of dates. Each time is its own task document, and completing one adds the next (`setStatus` and `updateDetails` in [`task_repository.dart`](lib/features/tasks/data/task_repository.dart)). That way everything else keeps working without knowing about repetition: the next one has its own comments, checklist, status and due date, and lists, the calendar, stats and export see ordinary tasks. The date logic is in [`task_repeat.dart`](lib/features/tasks/domain/task_repeat.dart).
+
+Three things make it safe:
+
+- **One batch.** The completion and the new task are written together, or neither is.
+- **The schedule moves.** The batch takes `repeat` off the completed task and puts it on the new one. Unticking and ticking the old task again adds nothing, and two devices completing it at once can't both start a new series from it.
+- **Viewers.** A viewer can't normally create tasks. The rules make one exception, `isNextInSeries` in [`firestore.rules`](firestore.rules): a new task with `repeatedFrom` pointing at a task that was assigned to them and repeating before this write (`get`), and is complete without a schedule after it (`getAfter`). The new task must be a copy of it, still assigned to them and not started. The rules can't compare checklists item by item, so only the number of items has to match.
+
+`repeatedFrom` is written only for that check; the app never reads it.
+
 ### Indexes
 
 Single-field queries work automatically. A query that filters on one field and sorts by another needs a **composite index**. The first time you run one, Firestore throws an error containing a link that creates the index. We'll also record them in `firestore.indexes.json` so they're deployed from the repo.

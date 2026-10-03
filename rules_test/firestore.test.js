@@ -531,6 +531,103 @@ describe('comments and activity', () => {
   });
 });
 
+describe('recurring tasks', () => {
+  const due = Timestamp.fromDate(new Date(Date.UTC(2026, 9, 5)));
+  const nextDue = Timestamp.fromDate(new Date(Date.UTC(2026, 9, 12)));
+
+  // t1 repeats weekly and is assigned to carol, a viewer.
+  beforeEach(() => seed((db) => setDoc(doc(db, 'projects/p1/tasks/t1'), task({
+    assigneeId: 'carol',
+    dueDate: due,
+    repeat: 'weekly',
+    checklist: [{ text: 'Draft', done: true }],
+  }))));
+
+  const next = (overrides = {}) => task({
+    ownerId: 'carol',
+    assigneeId: 'carol',
+    dueDate: nextDue,
+    repeat: 'weekly',
+    checklist: [{ text: 'Draft', done: false }],
+    order: 1,
+    repeatedFrom: 't1',
+    ...overrides,
+  });
+
+  /** The app's batch when carol ticks off t1: the next task comes with it. */
+  function completeAndContinue(db, { by = 'carol', from = 't1', nextTask = next(), stopRepeating = true } = {}) {
+    const batch = writeBatch(db);
+    batch.update(doc(db, `projects/p1/tasks/${from}`), {
+      status: 'complete',
+      completedAt: serverTimestamp(),
+      ...(stopRepeating ? { repeat: null } : {}),
+      updatedAt: serverTimestamp(),
+    });
+    batch.set(doc(db, `projects/p1/tasks/${from}/activity/e1`), entry({ kind: 'status', authorId: by, value: 'complete' }));
+    batch.set(doc(db, 'projects/p1/tasks/t9'), nextTask);
+    batch.set(doc(db, 'projects/p1/tasks/t9/activity/e2'), entry({ kind: 'created', authorId: by, value: '' }));
+    return batch.commit();
+  }
+
+  test('a viewer who completes their repeating task adds the next one', async () => {
+    await assertSucceeds(completeAndContinue(as('carol')));
+  });
+
+  test('only once: the schedule must come off the completed task', async () => {
+    await assertFails(completeAndContinue(as('carol'), { stopRepeating: false }));
+  });
+
+  test("a viewer can't add a next task on its own", async () => {
+    await assertFails(setDoc(doc(as('carol'), 'projects/p1/tasks/t9'), next()));
+  });
+
+  test('the next task must be a fresh copy, still theirs', async () => {
+    const carol = as('carol');
+    await assertFails(completeAndContinue(carol, { nextTask: next({ title: 'Something else' }) }));
+    await assertFails(completeAndContinue(carol, { nextTask: next({ priority: 'immediate' }) }));
+    await assertFails(completeAndContinue(carol, { nextTask: next({ repeat: 'daily' }) }));
+    await assertFails(completeAndContinue(carol, { nextTask: next({ assigneeId: 'bob' }) }));
+    await assertFails(completeAndContinue(carol, { nextTask: next({ status: 'complete' }) }));
+    await assertFails(completeAndContinue(carol, { nextTask: next({ checklist: [] }) }));
+  });
+
+  test("not from a task that isn't theirs, or doesn't repeat", async () => {
+    await seed(async (db) => {
+      await setDoc(doc(db, 'projects/p1/tasks/bobs'), task({ assigneeId: 'bob', dueDate: due, repeat: 'weekly' }));
+      await setDoc(doc(db, 'projects/p1/tasks/once'), task({ assigneeId: 'carol', dueDate: due }));
+    });
+    const carol = as('carol');
+    await assertFails(completeAndContinue(carol, { from: 'bobs', nextTask: next({ repeatedFrom: 'bobs' }) }));
+    await assertFails(completeAndContinue(carol, { from: 'once', nextTask: next({ repeatedFrom: 'once', repeat: null }) }));
+  });
+
+  test('a viewer can only take the schedule off as they complete the task', async () => {
+    const t1 = doc(as('carol'), 'projects/p1/tasks/t1');
+    await assertFails(updateDoc(t1, { repeat: null, updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(t1, { repeat: 'daily', updatedAt: serverTimestamp() }));
+  });
+
+  test('an editor can do the same, and change the schedule', async () => {
+    const bob = as('bob');
+    await assertSucceeds(updateDoc(doc(bob, 'projects/p1/tasks/t1'), {
+      repeat: 'monthly',
+      updatedAt: serverTimestamp(),
+    }));
+    await assertSucceeds(completeAndContinue(bob, {
+      by: 'bob',
+      nextTask: next({ ownerId: 'bob', repeat: 'monthly' }),
+    }));
+  });
+
+  test('a schedule must be one the app knows', async () => {
+    const dave = as('dave');
+    await assertSucceeds(setDoc(doc(dave, 'tasks/a'), task({ ownerId: 'dave', repeat: 'daily' })));
+    await assertSucceeds(setDoc(doc(dave, 'tasks/b'), task({ ownerId: 'dave', repeat: 'weekly', repeatedFrom: 'a' })));
+    await assertFails(setDoc(doc(dave, 'tasks/c'), task({ ownerId: 'dave', repeat: 'yearly' })));
+    await assertFails(setDoc(doc(dave, 'tasks/d'), task({ ownerId: 'dave', repeatedFrom: 7 })));
+  });
+});
+
 describe('personal tasks', () => {
   test('only the owner can read their tasks', async () => {
     await assertSucceeds(getDoc(doc(as('dave'), 'tasks/personal1')));

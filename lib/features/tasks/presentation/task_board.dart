@@ -12,6 +12,7 @@ import '../data/task_repository.dart';
 import '../domain/task.dart';
 import 'checklist_progress.dart';
 import 'due_date_label.dart';
+import 'repeat_label.dart';
 import 'task_activity_sheet.dart';
 import 'task_card.dart';
 import 'task_form.dart';
@@ -193,7 +194,8 @@ class _BoardColumn extends ConsumerWidget {
   }
 }
 
-/// Moves [task] to [status], saying so if it fails.
+/// Moves [task] to [status], saying so if it fails, or if that added the
+/// next task in a series.
 Future<void> moveTask(
   BuildContext context,
   WidgetRef ref,
@@ -201,8 +203,10 @@ Future<void> moveTask(
   TaskStatus status,
 ) async {
   final messenger = ScaffoldMessenger.of(context);
+  final localizations = MaterialLocalizations.of(context);
   try {
-    await ref.read(taskRepositoryProvider).setStatus(task, status);
+    final next = await ref.read(taskRepositoryProvider).setStatus(task, status);
+    if (next != null) showNextTaskAdded(messenger, localizations, next);
   } on FirebaseException {
     messenger.showSnackBar(
       SnackBar(content: Text("Couldn't move \"${task.title}\".")),
@@ -341,6 +345,7 @@ class BoardCard extends ConsumerWidget {
                     PriorityChip(task.priority),
                     if (task.dueDate != null)
                       DueDateLabel(task, today: DateTime.now()),
+                    if (task.repeats) RepeatLabel(task),
                     if (task.checklist.isNotEmpty) ChecklistProgress(task),
                     if (assignee != null)
                       Semantics(

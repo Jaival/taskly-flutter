@@ -3,6 +3,7 @@ import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:taskly/app/router.dart';
+import 'package:taskly/features/tasks/domain/task_repeat.dart';
 import 'package:taskly/features/tasks/presentation/task_card.dart';
 
 import '../../helpers/due_dates.dart';
@@ -22,6 +23,7 @@ void main() {
     double order = 1,
     int? dueInDays,
     String priority = 'medium',
+    String? repeat,
   }) => firestore.doc(path).set({
     'ownerId': ownerId ?? testUser.uid,
     'title': title,
@@ -30,6 +32,7 @@ void main() {
     'status': status,
     'assigneeId': assigneeId,
     'dueDate': dueInDays == null ? null : dueTimestamp(dueInDays),
+    'repeat': repeat,
     'order': order,
     'createdAt': Timestamp.now(),
     'updatedAt': Timestamp.now(),
@@ -635,6 +638,96 @@ void main() {
         {'text': 'Publish', 'done': false},
       ]);
       expect(find.text('0/1'), findsOneWidget);
+    });
+  });
+
+  group('repeating tasks', () {
+    final repeatField = find.byWidgetPredicate(
+      (widget) => widget is DropdownButtonFormField<TaskRepeat?>,
+    );
+
+    Future<void> chooseRepeat(WidgetTester tester, String label) async {
+      await tester.ensureVisible(repeatField);
+      await tester.tap(repeatField);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(label).last);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('a task with a due date can repeat', (tester) async {
+      await seedTask('tasks/a', title: 'Water plants', dueInDays: 1);
+      await pumpTasks(tester);
+      await tester.tap(find.text('Water plants'));
+      await tester.pumpAndSettle();
+
+      await chooseRepeat(tester, 'Every week');
+      expect(find.text('Completing it adds the next one.'), findsOneWidget);
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await tester.pumpAndSettle();
+
+      expect((await onlyTaskIn('tasks'))['repeat'], 'weekly');
+      expect(
+        find.descendant(
+          of: cardFor('Water plants'),
+          matching: find.text('Every week'),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets("without a due date it can't, and clearing one stops it", (
+      tester,
+    ) async {
+      await seedTask(
+        'tasks/a',
+        title: 'Water plants',
+        dueInDays: 1,
+        repeat: 'daily',
+      );
+      await pumpTasks(tester);
+      await tester.tap(find.text('Water plants'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Clear the due date'));
+      await tester.pumpAndSettle();
+      expect(find.text('Pick a due date to repeat the task.'), findsOneWidget);
+      expect(
+        tester
+            .widget<DropdownButton<TaskRepeat?>>(
+              find.byWidgetPredicate(
+                (widget) => widget is DropdownButton<TaskRepeat?>,
+              ),
+            )
+            .onChanged,
+        isNull,
+      );
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await tester.pumpAndSettle();
+
+      expect((await onlyTaskIn('tasks'))['repeat'], isNull);
+      expect(find.text('Every day'), findsNothing);
+    });
+
+    testWidgets('ticking one off adds the next, and says so', (tester) async {
+      await seedTask(
+        'tasks/a',
+        title: 'Water plants',
+        dueInDays: 0,
+        repeat: 'daily',
+      );
+      await pumpTasks(tester);
+
+      await tester.tap(checkboxFor('Water plants'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Next one added, due'), findsOneWidget);
+      final tasks = (await firestore.collection('tasks').get()).docs;
+      expect(tasks, hasLength(2));
+      final next = tasks.singleWhere((doc) => doc.id != 'a').data();
+      expect(next['status'], 'notStarted');
+      expect(next['dueDate'], dueTimestamp(1));
+      expect(next['repeat'], 'daily');
+      expect(cardFor('Water plants'), findsNWidgets(2));
     });
   });
 }
