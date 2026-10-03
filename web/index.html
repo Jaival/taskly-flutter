@@ -38,6 +38,23 @@
 
   <title>Taskly</title>
   <link rel="manifest" href="manifest.json">
+
+  <!--
+    The browser can offer to install the app before the app itself has
+    loaded. Keep the offer for it: lib/core/data/web_app_browser.dart shows
+    "Install app" in the account menu while there is one.
+  -->
+  <script>
+    function tasklyInstallOffer(offer) {
+      window.tasklyInstallPrompt = offer;
+      window.dispatchEvent(new Event('taskly-install-change'));
+    }
+    window.addEventListener('beforeinstallprompt', (event) => {
+      event.preventDefault();
+      tasklyInstallOffer(event);
+    });
+    window.addEventListener('appinstalled', () => tasklyInstallOffer(null));
+  </script>
 </head>
 <body>
   <!--

@@ -282,7 +282,13 @@ Tier A is what makes this feel like a real product. The rest is optional.
   - Forms no longer wait for the server while offline. Before, saving a task without a connection spun until it came back; now the change shows at once and is sent later (devops.md 11).
   - Still needs a connection: signing in and up, changing your password, deleting your account. If the server refuses a change made offline (you were removed from the project meanwhile), it's undone on the device when you reconnect, without a message.
   - "Offline" means no network at all. A Wi-Fi that isn't connected to the internet still counts as online, and there the app waits as before.
-- [ ] **Installable PWA** with an update prompt.
+- [x] **Installable PWA** with an update prompt.
+  - The web app can be installed: the browser offers it in the address bar, and while it does, "Install app" is in the account menu. Safari has no such offer; there it's Share, then "Add to Home Screen".
+  - A copy of the app is kept on the device, so it opens at once and without a connection, on any page. With the offline support above, the installed app can be opened and used on a plane.
+  - When a newer version has been deployed, the app downloads it in the background and a banner says "A new version of Taskly is ready", with a Reload button. It never reloads by itself, since there may be a half-written task on the screen. Leave the banner alone and the new version is simply there the next time the app is opened.
+  - It looks for a new version shortly after opening, and again when you come back to a tab that has been open for half an hour or more.
+  - Flutter no longer writes the service worker that makes this work, so the app has its own: `web/sw.js` (devops.md 9). It has tests (`web_test/`), which CI runs.
+  - Tried in Chrome against a local release build: first visit, reopening with the server switched off, a second version appearing, Reload. The browser's real install offer could not be tried there (a simulated one was), and nothing has been tried in Safari or Firefox.
 - [ ] **Android/iOS builds.** The responsive UI from Phase 3 already works on phones.
 - [ ] **Notifications:** due-date reminders via Firebase Cloud Messaging and a scheduled Cloud Function.
 

@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../core/data/web_app.dart';
 import '../core/widgets/offline_banner.dart';
+import '../core/widgets/update_banner.dart';
 import '../features/auth/data/auth_repository.dart';
 import '../features/auth/presentation/verify_email_banner.dart';
 import '../features/my_tasks/data/my_tasks_provider.dart';
@@ -87,7 +89,7 @@ class AppShell extends ConsumerWidget {
     final width = MediaQuery.sizeOf(context).width;
     final selected = navigationShell.currentIndex;
     final body = OfflineBanner(
-      child: VerifyEmailBanner(child: navigationShell),
+      child: UpdateBanner(child: VerifyEmailBanner(child: navigationShell)),
     );
     final appBar = !showAppBar
         ? null
@@ -176,6 +178,7 @@ class _AccountMenu extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(currentUserProvider);
+    final webApp = ref.watch(webAppProvider);
     final theme = Theme.of(context);
 
     return MenuAnchor(
@@ -198,6 +201,17 @@ class _AccountMenu extends ConsumerWidget {
             onPressed: () => showShortcutsHelp(context),
             child: const Text('Keyboard shortcuts'),
           ),
+        // Only while the browser is offering it.
+        ListenableBuilder(
+          listenable: webApp,
+          builder: (context, _) => webApp.canInstall
+              ? MenuItemButton(
+                  leadingIcon: const Icon(Icons.install_desktop_outlined),
+                  onPressed: webApp.install,
+                  child: const Text('Install app'),
+                )
+              : const SizedBox.shrink(),
+        ),
         MenuItemButton(
           leadingIcon: const Icon(Icons.logout),
           onPressed: () => ref.read(authRepositoryProvider).signOut(),

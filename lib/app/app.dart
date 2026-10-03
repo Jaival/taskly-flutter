@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/data/web_app.dart';
 import 'router.dart';
 import 'theme/app_theme.dart';
 
@@ -10,6 +11,8 @@ class TasklyApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = ref.watch(appThemeProvider);
+    // In a browser, starts keeping a copy of the app for offline use.
+    ref.watch(webAppProvider);
     return MaterialApp.router(
       title: 'Taskly',
       debugShowCheckedModeBanner: false,
