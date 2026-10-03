@@ -334,11 +334,18 @@ Tier A is what makes this feel like a real product. The rest is optional.
 
 ## Phase 5: Quality and release (ongoing, formalise at the end)
 
-- [ ] **Integration tests:** a small `integration_test` suite against the emulator for sign up → create project → add task → complete task.
-- [ ] **CI:** analyze, test, and `flutter build web --wasm` on every PR. Deploy only from `main`.
+- [x] **Integration tests:** a small `integration_test` suite against the emulator for sign up → create project → add task → complete task.
+  - `integration_test/app_test.dart` does that journey in the real app, against the Auth and Firestore emulators with the real rules, then reads the project and task back from the server (devops.md 6).
+  - Runs on Android (`flutter test integration_test -d <device>`) and in Chrome (`flutter drive`, through `test_driver/`). CI runs it in headless Chrome on every PR, and deploying waits for it.
+  - Passed on the Android emulator (twice in a row, about 30 seconds) and in headless Chrome, including the CI command run while logged out of Firebase.
+- [x] **CI:** analyze, test, and `flutter build web --wasm` on every PR. Deploy only from `main`.
+  - Every PR runs: format, analyze and the Dart tests; the rules tests; the service worker tests; the integration test in Chrome; and a WebAssembly build. Deploying to GitHub Pages happens only on `main`, and only when all of them pass.
+  - The app compiles to WebAssembly, and the integration test passes compiled that way too (tried locally). The site still serves the JavaScript build: the service worker only pre-caches `main.dart.js`, so switching needs it to cache the WebAssembly files as well, and a check in Safari and Firefox.
 - [ ] **Hosting:** move from GH Pages to **Firebase Hosting**, with PR preview channels and the same project as auth and data. Keep GH Pages only if you want the public URL unchanged.
 - [ ] **Monitoring:** Firebase Analytics, plus Crashlytics if you ship mobile.
-- [ ] **README:** screenshots, a feature list, a tech-stack section, and setup steps (`flutterfire configure`, emulators, run). Useful if this goes in a portfolio.
+- [x] **README:** screenshots, a feature list, a tech-stack section, and setup steps (`flutterfire configure`, emulators, run). Useful if this goes in a portfolio.
+  - Rewritten from the 2021 placeholder: what Taskly is and a link to the live site, the features, five screenshots (light and dark, desktop and phone), the tech stack, running it against the emulators or your own Firebase project, and the tests.
+  - The screenshots are in `docs/screenshots/`, taken from the real app against the emulators with demo data. The README links to the original code through the `v1-internship` tag.
 - [ ] Delete the old `taskly-dc4e2` Firebase project.
 
 ---
