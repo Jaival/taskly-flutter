@@ -712,6 +712,34 @@ upgrade     ●──●──●──●──●    ← work here, open a PR,
 
 Hot reload: while `flutter run` is running, press `r` to reload code changes in under a second while keeping app state, and `R` for a full restart.
 
+### Releasing on Android
+
+`flutter run` installs a **debug** build: slow, big, and signed with a key every Android SDK has. A phone or the Play Store wants a **release** build signed with a key that's yours. The project is set up so that the key is the only missing piece.
+
+1. **Make the upload key**, once. Keep the file and its password somewhere safe and out of the project; without them you can't publish updates.
+   ```
+   keytool -genkey -v -keystore %USERPROFILE%\upload-keystore.jks -keyalg RSA -storetype JKS -keysize 2048 -validity 10000 -alias upload
+   ```
+   (`keytool` comes with Java: Android Studio's is in its `jbr\bin` folder.)
+2. **Tell the build where it is**, in a new file `android/key.properties`. It's in `.gitignore`: it holds passwords.
+   ```properties
+   storePassword=<the password you chose>
+   keyPassword=<the same>
+   keyAlias=upload
+   storeFile=C:/Users/you/upload-keystore.jks
+   ```
+   Use forward slashes in the path. In this kind of file a backslash starts an escape, so `C:\Users\...` silently becomes something else and the build fails.
+3. **Build.** `flutter build appbundle` for the Play Store (an `.aab`), or `flutter build apk --release` for a file you can install directly.
+
+`android/app/build.gradle.kts` reads `key.properties` if it exists and signs with that key. If it doesn't, release builds are signed with the debug key, so `flutter run --release` still works on any machine, but the Play Store refuses such a build.
+
+Each upload needs a higher **version code** than the last: that's the number after the `+` in `version: 2.0.0+1` in `pubspec.yaml`.
+
+Two things that only show up in release builds:
+
+- **The code is shrunk** (unused classes are removed), which is where apps using Firebase tend to break. Taskly's release build has been tried: signing in, reading and writing.
+- **Plain `http://` is blocked.** That's what you want in production, where everything is `https://`, but the Firebase emulators speak plain HTTP, so a release build can't use them: signing in fails with "Something went wrong", and the device log says `Cleartext HTTP traffic to 10.0.2.2 not permitted`. Debug builds allow it (`android/app/src/debug/AndroidManifest.xml`). To try a release build against the emulators, add `android:usesCleartextTraffic="true"` to `<application>` in the main manifest for the test, and take it out again.
+
 ### Installing the app, and updating it
 
 On the web, Taskly is a **PWA** (progressive web app): a site the browser can install like an app, and that opens without a connection. Two files make it one.
@@ -947,6 +975,7 @@ Always run the rules tests first. The Firebase console also has a "Rules Playgro
 | Running with the emulators in a browser: you're signed out, a seeded login is "incorrect", and there's no red "Running in emulator mode" strip at the bottom | A new tab that still has a saved emulator session. The auth plugin checks that session against the *real* project before `main()` can point it at the emulator, and then quietly ignores the request to switch. Until the page is reloaded, sign-in and sign-up in that tab go to production | Reload the tab once (the plugin remembers the emulator per tab after the first try). Don't sign up while the red strip is missing |
 | The web app shows an old version after a deploy | That's the service worker doing its job: the page comes from the copy on the device until the update is applied | Wait for the "new version" banner, or close every Taskly tab and reopen. To check what's there: DevTools → Application → Cache storage (section 9) |
 | A release build on `localhost` never shows the update banner | The service worker is off on localhost unless asked for | `localStorage.setItem('taskly.serviceWorker', 'on')` in the console, reload (section 9) |
+| A release build on Android can't sign in when run with the emulators; the log says `Cleartext HTTP traffic to 10.0.2.2 not permitted` | Release builds only allow `https://`, and the emulators are plain HTTP | Expected. Use a debug build with the emulators (section 9, "Releasing on Android") |
 | App on the emulator can't reach the Firebase emulators | Emulators not running, or the app was started without the flag | Start them first; run with `--dart-define=USE_FIREBASE_EMULATORS=true` |
 
 ---

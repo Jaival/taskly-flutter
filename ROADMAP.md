@@ -290,6 +290,12 @@ Tier A is what makes this feel like a real product. The rest is optional.
   - Flutter no longer writes the service worker that makes this work, so the app has its own: `web/sw.js` (devops.md 9). It has tests (`web_test/`), which CI runs.
   - Tried in Chrome against a local release build: first visit, reopening with the server switched off, a second version appearing, Reload. The browser's real install offer could not be tried there (a simulated one was), and nothing has been tried in Safari or Firefox.
 - [ ] **Android/iOS builds.** The responsive UI from Phase 3 already works on phones.
+  - Android is ready to release, short of two things only you can do: make the upload key, and create the app in the Play Console (devops.md 9, "Releasing on Android").
+    - A release build (`flutter build apk --release` or `appbundle`) compiles and runs: signing in, loading and saving were tried on the emulator against the Firebase emulators. Release builds shrink the code, which is where Firebase apps tend to break, so this was worth trying.
+    - The build signs with your key as soon as `android/key.properties` exists, and with the debug key until then. Tried with a throwaway key.
+    - The app is now called "Taskly" under its icon (it was "taskly"), and asks for the internet permission itself instead of relying on Firebase's libraries to.
+    - Not done: Google sign-in on Android (Tier B), and a store listing (screenshots, description, privacy policy).
+  - iOS hasn't been built at all: that needs a Mac with Xcode, and an Apple developer account to release.
 - [ ] **Notifications:** due-date reminders via Firebase Cloud Messaging and a scheduled Cloud Function.
 
 ### Tier D: stretch
