@@ -168,6 +168,7 @@ taskly-flutter/
 │       │   ├── data/         ← *_firestore.dart: typed collections + converters
 │       │   └── presentation/ ← pages and widgets
 │       ├── my_tasks/         ← the Tasks page: your tasks from everywhere, filtered
+│       ├── account/          ← deleting your account, and everything of yours with it
 │       └── home/  landing/
 │           └── presentation/
 ├── test/                     ← mirrors lib/ (test/app ↔ lib/app, etc.)
@@ -233,6 +234,7 @@ presentation  ──►  data  ──►  domain
 - The project page shows `ProjectTaskList` from `tasks/presentation`. It takes plain values (`projectId`, `uid`, `canEdit`, `members`), not a `Project`, so `tasks` doesn't depend on `projects`. Dependencies between features should point one way; if two features need each other, something belongs in `core/`.
 - The same goes for sharing: the project page embeds `ProjectInvites` and opens `showInviteForm`, and the Shared page (in `projects`, since it lists projects) embeds `ReceivedInvites`. All take plain values. So the arrows are `projects → sharing, tasks, profile` and `sharing → profile, auth`, never back.
 - The Tasks page lists personal tasks *and* project tasks assigned to you, so it needs both features. It can't live in `tasks` (that would point `tasks → projects`), so it has its own feature, `my_tasks`, which depends on both. Home uses its `myTasksProvider` too. `TaskCard` takes the project's name as a plain `projectName` string for the same reason.
+- Deleting an account touches nearly everything: it leaves projects, deletes projects, tasks and the profile, then the account ([`account_deletion.dart`](lib/features/account/data/account_deletion.dart)). The Profile page can't own that (`projects` and `sharing` already depend on `profile`, for people's names), so it lives in `account`, which depends on the rest and which nothing depends on. The router hands its "Delete account" card to the Profile page as a `footer` widget. The order inside matters: check the password first (Firebase refuses to delete an account that hasn't signed in recently, and finding that out after the data was gone would leave an empty account), and delete the account last (without it, the rules would refuse the rest).
 
 ### Why models and Firestore code are separate files
 
@@ -505,7 +507,7 @@ A key press goes to the widget that has the **focus**, then up through its paren
 
 There are two test suites:
 
-- **Dart tests** (`test/`, 276 tests): run with `flutter test`. Takes a few seconds.
+- **Dart tests** (`test/`, 283 tests): run with `flutter test`. Takes a few seconds.
 - **Security rules tests** (`rules_test/`, 53 tests): run with `npm test` inside `rules_test/`. This starts the Firestore emulator, runs the tests, and stops it. If the emulators are already running (you'd get "port taken"), use them instead: `FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npm run test:only`. The tests load `firestore.rules` fresh each run. See [section 11](#11-firestore-primer-read-before-phase-2).
 
 ### The testing pyramid

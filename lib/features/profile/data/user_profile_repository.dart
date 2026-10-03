@@ -42,6 +42,8 @@ class UserProfileRepository {
     });
   }
 
+  Future<void> deleteProfile(String uid) => _users.doc(uid).delete();
+
   /// The profile, or null if it doesn't exist (yet).
   Stream<UserProfile?> watchProfile(String uid) =>
       _users.doc(uid).snapshots().map((snapshot) => snapshot.data());

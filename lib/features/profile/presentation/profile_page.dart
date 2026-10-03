@@ -15,7 +15,11 @@ import '../../auth/presentation/change_password_dialog.dart';
 import '../data/user_profile_repository.dart';
 
 class ProfilePage extends ConsumerWidget {
-  const ProfilePage({super.key});
+  const ProfilePage({super.key, this.footer});
+
+  /// Shown under the account card. The router puts "Delete account" here:
+  /// that reaches into projects and tasks, which this feature doesn't.
+  final Widget? footer;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -48,6 +52,10 @@ class ProfilePage extends ConsumerWidget {
                         _NameCard(user: user),
                         const SizedBox(height: AppSpacing.md),
                         _AccountCard(user: user),
+                        if (footer case final footer?) ...[
+                          const SizedBox(height: AppSpacing.md),
+                          footer,
+                        ],
                       ],
                     ),
                   ),

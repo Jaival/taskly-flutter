@@ -17,6 +17,9 @@ class TaskRepository {
   final FirebaseFirestore _db;
   final DateTime Function() _clock;
 
+  /// Firestore allows at most 500 writes per batch.
+  static const _maxBatchWrites = 500;
+
   /// Personal tasks when [projectId] is null, otherwise the project's.
   CollectionReference<Task> _collection(String? projectId) => projectId == null
       ? personalTasksCollection(_db)
@@ -112,6 +115,21 @@ class TaskRepository {
   });
 
   Future<void> deleteTask(Task task) => _doc(task).delete();
+
+  /// Deletes all of [uid]'s personal tasks, when their account is deleted.
+  Future<void> deletePersonalTasks(String uid) async {
+    final tasks = await _db
+        .collection('tasks')
+        .where('ownerId', isEqualTo: uid)
+        .get();
+    for (var i = 0; i < tasks.docs.length; i += _maxBatchWrites) {
+      final batch = _db.batch();
+      for (final task in tasks.docs.skip(i).take(_maxBatchWrites)) {
+        batch.delete(task.reference);
+      }
+      await batch.commit();
+    }
+  }
 
   /// What to write to `completedAt` when [task] moves to [status]: now when
   /// it becomes complete, nothing when it already was (so editing a done

@@ -148,6 +148,31 @@ class FakeAuthRepository implements AuthRepository {
     changedPassword = newPassword;
   }
 
+  /// Whether [deleteAccount] has succeeded.
+  bool accountDeleted = false;
+
+  /// Makes [deleteAccount] fail, as if the connection had dropped.
+  bool failAccountDeletion = false;
+
+  @override
+  Future<void> reauthenticate(String password) async {
+    _maybeFail();
+    if (password != _currentPassword) {
+      throw const AuthFailure('Your current password is incorrect.');
+    }
+  }
+
+  @override
+  Future<void> deleteAccount() async {
+    _maybeFail();
+    if (failAccountDeletion) {
+      throw authFailureFromCode('network-request-failed');
+    }
+    accountDeleted = true;
+    _accounts.remove(currentUser?.email);
+    emit(null);
+  }
+
   @override
   Future<void> signOut() async => emit(null);
 }

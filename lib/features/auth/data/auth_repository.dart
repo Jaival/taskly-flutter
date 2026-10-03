@@ -85,6 +85,17 @@ class AuthRepository {
     await user.updatePassword(newPassword);
   });
 
+  /// Checks [password] is the current user's. Call it before
+  /// [deleteAccount], which Firebase only allows soon after a sign-in.
+  Future<void> reauthenticate(String password) =>
+      _guard(() => _reauthenticate(password));
+
+  /// Deletes the account and signs out. Its data in Firestore has to be
+  /// deleted first, while there's still a user to delete it as.
+  Future<void> deleteAccount() => _guard(() async {
+    await _auth.currentUser?.delete();
+  });
+
   Future<void> signOut() => _auth.signOut();
 
   /// Signs the current user in again with [password], which Firebase wants

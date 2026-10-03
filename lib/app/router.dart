@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../features/account/presentation/delete_account.dart';
 import '../features/auth/data/auth_repository.dart';
 import '../features/auth/presentation/login_page.dart';
 import '../features/auth/presentation/sign_up_page.dart';
@@ -63,8 +64,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: Routes.profile,
-        builder: (context, state) =>
-            const PageTitle('Profile', child: ProfilePage()),
+        builder: (context, state) => const PageTitle(
+          'Profile',
+          child: ProfilePage(footer: DeleteAccountCard()),
+        ),
       ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) => AppShell(

@@ -256,7 +256,10 @@ Tier A is what makes this feel like a real product. The rest is optional.
 - [ ] **Google sign-in**, email verification, change password, delete account.
   - [x] Email verification: done in Phase 1 (the banner, "Resend" and "I've verified").
   - [x] Change password: "Change password" on the Profile page asks for the current password and a new one (at least 8 characters, and different). Checking the current one is what Firebase requires before a password change, and it stops someone at an unlocked laptop locking the owner out. "Forgot it? Email me a reset link" is still there for anyone who can't remember it.
-  - [ ] Delete account.
+  - [x] Delete account: "Delete account" at the bottom of the Profile page. The dialog says what goes (your personal tasks, the projects you own with their tasks and invites), warns when some of those projects are shared, and asks for your password.
+    - Projects shared with you stay, without you. Tasks you created there stay too, and tasks assigned to you show as unassigned.
+    - There are no Cloud Functions, so the app deletes the data as you, then the account last (devops.md 4). If the connection drops part-way the account is still there, and deleting again finishes the job.
+    - Invites other people sent to your email are left alone: they belong to the inviter, who can cancel them.
   - [ ] Google sign-in.
 - [ ] **Comments and an activity log** on tasks ("Alex moved this to In Progress").
 - [ ] **Avatar upload** via Firebase Storage.
