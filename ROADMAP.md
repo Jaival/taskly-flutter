@@ -339,6 +339,8 @@ Tier A is what makes this feel like a real product. The rest is optional.
   - Runs on Android (`flutter test integration_test -d <device>`) and in Chrome (`flutter drive`, through `test_driver/`). CI runs it in headless Chrome on every PR, and deploying waits for it.
   - Passed on the Android emulator (twice in a row, about 30 seconds) and in headless Chrome, including the CI command run while logged out of Firebase.
 - [x] **CI:** analyze, test, and `flutter build web --wasm` on every PR. Deploy only from `main`.
+- [x] **Releases:** pushing a `v*` tag builds every platform and publishes a GitHub Release (`.github/workflows/release.yml`, devops.md 8).
+- [ ] **You:** add the signing secrets (devops.md 8, "Signing secrets"), then try a signed build with Actions → Release → Run workflow.
   - Every PR runs: format, analyze and the Dart tests; the rules tests; the service worker tests; the integration test in Chrome; and a WebAssembly build. Deploying to GitHub Pages happens only on `main`, and only when all of them pass.
   - The app compiles to WebAssembly, and the integration test passes compiled that way too (tried locally). The site still serves the JavaScript build: the service worker only pre-caches `main.dart.js`, so switching needs it to cache the WebAssembly files as well, and a check in Safari and Firefox.
 - [ ] **Hosting:** move from GH Pages to **Firebase Hosting**, with PR preview channels and the same project as auth and data. Keep GH Pages only if you want the public URL unchanged.

@@ -714,6 +714,80 @@ Someone who signs in with Google has no Taskly password. `AppUser.hasPassword` i
 
 **Windows tip:** Git Bash rewrites arguments that look like paths, so `--base-href /taskly-flutter/` becomes `C:/Program Files/Git/taskly-flutter/`. Run that command in PowerShell, or prefix it with `MSYS_NO_PATHCONV=1` in Git Bash.
 
+### Releases
+
+[`.github/workflows/release.yml`](.github/workflows/release.yml) builds the app for every platform and publishes a **GitHub Release** with the files attached. It runs when a tag starting with `v` is pushed:
+
+1. Bump `version:` in `pubspec.yaml`, for example `2.0.0+1` → `2.1.0+2`. The part after `+` must go up on every release: Android and iOS refuse an update with a build number they've already seen.
+2. Commit it, merge it to `main`, then tag that commit and push the tag:
+   ```
+   git tag v2.1.0
+   git push origin v2.1.0
+   ```
+   The tag has to match the version (`v` + the part before `+`), or the workflow stops at once. A version with a hyphen, like `2.1.0-beta.1`, becomes a pre-release.
+
+```
+ push tag v2.1.0
+        │
+ ┌── prepare ──┐   tag == pubspec version?
+        │
+ ┌── test ─────┬── android ──┬── ios ─────┬── macos ────┬── windows ──┬── web ──┐   (all in parallel)
+ │ analyze,    │ .apk, .aab  │ .ipa       │ .dmg        │ .zip        │ .zip    │
+ │ flutter test│ ubuntu      │ macOS      │ macOS       │ Windows     │ ubuntu  │
+ └─────────────┴─────────────┴────────────┴─────────────┴─────────────┴─────────┘
+        │ only if every job passed
+ ┌── publish ──┐   gh release create v2.1.0 + all files, notes from the merged PRs
+```
+
+**Actions → Release → Run workflow** runs everything except publishing. Use it to try the pipeline, or a new secret, without making a release; the files are on the run's page under *Artifacts*.
+
+Each job builds on a machine with that platform's tools: iOS and macOS need Xcode, so they run on GitHub's Macs. `permissions: contents: write`, which creating a release needs, is given only to the publish job.
+
+#### Signing secrets
+
+A release is only as useful as its signatures. They're kept in **Settings → Secrets and variables → Actions**. Each platform works without its secrets, but gives you something worse and says so with a warning on the run:
+
+| Platform | Without secrets | Secrets |
+|---|---|---|
+| Android | Signed with the debug key: installs from the file, but the Play Store won't take it, and a later build signed with your real key can't update it. | `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` |
+| iOS | `taskly-…-ios-unsigned.ipa`. Installable only through a sideloading tool (AltStore, Sideloadly) that signs it with your own Apple ID. | `IOS_CERTIFICATE_P12_BASE64`, `IOS_CERTIFICATE_PASSWORD`, `IOS_PROVISIONING_PROFILE_BASE64` |
+| macOS | `taskly-…-macos-unsigned.zip`. Opens after a trip to System Settings → Privacy & Security, but **signing in fails**: Firebase Auth needs Keychain Sharing, which needs a signed app. | `MACOS_CERTIFICATE_P12_BASE64`, `MACOS_CERTIFICATE_PASSWORD`, `MACOS_PROVISIONING_PROFILE_BASE64`, plus for notarization `APP_STORE_CONNECT_API_KEY_BASE64`, `APP_STORE_CONNECT_KEY_ID`, `APP_STORE_CONNECT_ISSUER_ID` |
+| Windows, web | Nothing to sign. Windows will warn about an unknown publisher (SmartScreen) until the app has a code-signing certificate. | none |
+
+Secrets hold text, so binary files go in as base64. On Windows:
+
+```powershell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("$env:USERPROFILE\upload-keystore.jks")) | Set-Clipboard
+```
+
+On a Mac: `base64 -i file | pbcopy`. Paste the result as the secret's value.
+
+**Android.** The upload key from [section 9](#releasing-on-android). `ANDROID_KEY_PASSWORD` can be left out if it's the same as the keystore's.
+
+**iOS** (on a Mac, with the paid Apple Developer account):
+
+1. developer.apple.com → Certificates → **+** → *Apple Distribution*. Install it, then in Keychain Access, right-click it → *Export* as `.p12` with a password. Export the certificate, not the key under it: the `.p12` needs both, and exporting the certificate includes its key. → `IOS_CERTIFICATE_P12_BASE64`, `IOS_CERTIFICATE_PASSWORD`.
+2. Identifiers → register `com.jaival.taskly` if it isn't there.
+3. Profiles → **+** → the kind decides what the `.ipa` is good for. The workflow reads the profile and exports to match:
+   - **Ad Hoc**: installs on the devices listed in the profile (add them under Devices first). The useful kind for a GitHub Release.
+   - **App Store Connect**: only for uploading to TestFlight or the App Store.
+
+   Download it → `IOS_PROVISIONING_PROFILE_BASE64`.
+
+**macOS:**
+
+1. Certificates → **+** → *Developer ID Application* (only the account holder can make one). Export as `.p12` as above → `MACOS_CERTIFICATE_P12_BASE64`, `MACOS_CERTIFICATE_PASSWORD`.
+2. Profiles → **+** → *Developer ID* (under Distribution), platform macOS, for `com.jaival.taskly` → `MACOS_PROVISIONING_PROFILE_BASE64`. Keychain Sharing is a restricted entitlement, and only a profile can grant it.
+3. For notarization, App Store Connect → Users and Access → Integrations → **App Store Connect API** → generate a key with the *Developer* role. It downloads once, as `AuthKey_XXXX.p8` → `APP_STORE_CONNECT_API_KEY_BASE64`; its Key ID → `APP_STORE_CONNECT_KEY_ID`; the Issuer ID above the list → `APP_STORE_CONNECT_ISSUER_ID`.
+
+What the workflow does with them, so a failure makes sense:
+
+- **`tool/ci/apple_signing.sh`** imports the certificate into a keychain of its own (unlocked, so nothing waits for a password prompt), installs the profile, and works out the team, the identity and the export method.
+- **`tool/ci/sign_xcode_target.rb`** switches the Runner target's Release configuration to manual signing with them. The checked-in projects stay on automatic signing with no team, so they still build on any Mac. The setting has to go on the target: on the `xcodebuild` command line it would reach every Swift package too, and those can't take a provisioning profile.
+- **macOS only:** the build adds Keychain Sharing to `Release.entitlements`, signs the app again with the *hardened runtime* and a secure timestamp (both required for notarization), packs it in a `.dmg`, and sends that to Apple. Notarization takes a few minutes; `notarytool` waits for it, and prints Apple's log if it's refused. Then `stapler` attaches the ticket to the `.dmg`, so it opens without asking Apple first.
+
+None of the Apple signing could be tried from a Windows machine, so expect the first signed run to need a fix or two. **Run workflow** is the way to find out without a release.
+
 ### Branching workflow
 
 ```

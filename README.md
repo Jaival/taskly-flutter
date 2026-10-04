@@ -46,7 +46,7 @@ Taskly started as an internship project in 2021. Version 2 is a rewrite on curre
 | Backend | Firebase Authentication and Cloud Firestore, with [security rules](firestore.rules) as the access control |
 | Offline and install | Firestore's on-device cache, and a [service worker](web/sw.js) of its own |
 | Tests | Unit and widget tests, an integration test against the Firebase emulators, rules tests in Node |
-| CI/CD | GitHub Actions: format, analyze, all the tests and a WebAssembly build on every PR; deploys to GitHub Pages from `main` |
+| CI/CD | GitHub Actions: format, analyze, all the tests and a WebAssembly build on every PR; deploys to GitHub Pages from `main`; a `v*` tag builds Android, iOS, macOS, Windows and web and publishes them as a GitHub Release |
 
 The code is organised by feature (`lib/features/tasks`, `lib/features/projects`, …), each split into `domain`, `data` and `presentation`. [devops.md](devops.md) walks through it.
 
