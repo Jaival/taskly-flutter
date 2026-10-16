@@ -8,6 +8,7 @@ import '../core/widgets/update_banner.dart';
 import '../features/auth/data/auth_repository.dart';
 import '../features/auth/presentation/verify_email_banner.dart';
 import '../features/my_tasks/data/my_tasks_provider.dart';
+import '../features/my_tasks/presentation/tasks_app_bar.dart';
 import '../features/projects/presentation/new_project_task.dart';
 import '../features/sharing/data/invite_repository.dart';
 import '../features/tasks/presentation/task_form.dart';
@@ -93,11 +94,15 @@ class AppShell extends ConsumerWidget {
     );
     final appBar = !showAppBar
         ? null
+        // On Tasks, the search box stands in for the title.
         : AppBar(
-            title: Text(_destinations[selected].label),
-            actions: const [
-              _AccountMenu(),
-              SizedBox(width: AppSpacing.sm),
+            title: selected == _tasksIndex
+                ? const TaskSearchField()
+                : Text(_destinations[selected].label),
+            actions: [
+              if (selected == _tasksIndex) const TasksAppBarActions(),
+              const _AccountMenu(),
+              const SizedBox(width: AppSpacing.sm),
             ],
           );
 
@@ -193,6 +198,11 @@ class _AccountMenu extends ConsumerWidget {
           leadingIcon: const Icon(Icons.person_outline),
           onPressed: () => context.push(Routes.profile),
           child: const Text('Profile'),
+        ),
+        MenuItemButton(
+          leadingIcon: const Icon(Icons.settings_outlined),
+          onPressed: () => context.push(Routes.settings),
+          child: const Text('Settings'),
         ),
         // Not on phones, which rarely have a keyboard.
         if (MediaQuery.sizeOf(context).width >= Breakpoints.medium)

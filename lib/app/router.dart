@@ -14,6 +14,7 @@ import '../features/profile/presentation/profile_page.dart';
 import '../features/projects/presentation/project_detail_page.dart';
 import '../features/projects/presentation/projects_page.dart';
 import '../features/projects/presentation/shared_page.dart';
+import '../features/settings/presentation/settings_page.dart';
 import '../features/my_tasks/presentation/tasks_page.dart';
 import '../core/widgets/page_title.dart';
 import 'app_shell.dart';
@@ -30,6 +31,7 @@ abstract final class Routes {
   static const tasks = '/tasks';
   static const shared = '/shared';
   static const profile = '/profile';
+  static const settings = '/settings';
 }
 
 /// Pages that signed-out users may visit. Signed-in users are sent past them.
@@ -68,6 +70,11 @@ final routerProvider = Provider<GoRouter>((ref) {
           'Profile',
           child: ProfilePage(footer: DeleteAccountCard()),
         ),
+      ),
+      GoRoute(
+        path: Routes.settings,
+        builder: (context, state) =>
+            const PageTitle('Settings', child: SettingsPage()),
       ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) => AppShell(

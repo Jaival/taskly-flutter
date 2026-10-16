@@ -14,7 +14,7 @@ Taskly started as an internship project in 2021. Version 2 is a rewrite on curre
 - Personal tasks, and project tasks assigned to you, on one page. Grouped into Overdue, Today, Upcoming, No due date and Done.
 - Due dates, priorities, statuses, checklists, and labels in nine colours.
 - Tasks that repeat every day, week or month. Ticking one off adds the next.
-- Search, filters (priority, status, due, project, label) and sorting. A month calendar of what's due.
+- Search, filters (priority, status, due, project, label) and sorting. A month calendar of what's due. A default view and sort in Settings.
 - Export what's on the page as a spreadsheet (CSV) or a calendar file (iCal).
 
 **Projects and teams**
