@@ -13,6 +13,7 @@ import 'package:taskly/features/tasks/domain/task_activity.dart';
 import 'package:taskly/features/tasks/presentation/task_activity_sheet.dart';
 
 import '../../helpers/pump_app.dart';
+import '../../helpers/task_actions.dart';
 
 const _alex = AppUser(uid: 'alex', displayName: 'Alex Kim');
 
@@ -420,10 +421,7 @@ void main() {
         location: '/projects/p1',
         size: size,
       );
-      await tester.ensureVisible(find.byTooltip('Comments on "Write copy"'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Comments on "Write copy"'));
-      await tester.pumpAndSettle();
+      await tapTaskAction(tester, 'Write copy', 'Comments');
     }
 
     testWidgets('shows comments and changes, oldest first', (tester) async {
@@ -510,8 +508,7 @@ void main() {
 
       await tester.tap(find.bySemanticsLabel('Complete "Write copy"'));
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Comments on "Write copy"'));
-      await tester.pumpAndSettle();
+      await tapTaskAction(tester, 'Write copy', 'Comments');
 
       expect(
         find.text('You moved this to Complete · Just now'),
@@ -602,6 +599,6 @@ void main() {
     await pumpApp(tester, user: testUser, firestore: db, location: '/tasks');
 
     expect(find.text('Buy milk'), findsOneWidget);
-    expect(find.byTooltip('Comments on "Buy milk"'), findsNothing);
+    expect(await taskActions(tester, 'Buy milk'), ['Edit', 'Delete']);
   });
 }

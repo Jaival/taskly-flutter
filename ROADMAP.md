@@ -338,6 +338,11 @@ Tier A is what makes this feel like a real product. The rest is optional.
   - Tried on the Android emulator (Android 37): the tile appears first, picking it takes the wallpaper's accent, and after changing the system colour to green the app came back green.
   - A test checks every theme, light and dark, for 4.5:1 contrast on text and button labels. That made the light Rose and Ember accents a shade darker than shadcn's.
   - Only the colours, shapes and font change here. The task row redesign, quick add and the desktop sidebar from the same review are still to do. The README screenshots show the old look.
+- [x] **Compact task rows**, from the same review: about twice as many tasks fit on a screen.
+  - The checkbox is drawn in the priority's colour (low keeps the plain box), and Immediate and High also get a flag with their name, so priority isn't told by colour alone. "Not started" isn't shown, since an empty box says so; "In progress" still is.
+  - Everything else is on one line under the title: due date, repeat, checklist, labels (a dot and the name, not a pill), assignee and project. The description shows one line.
+  - The trash and comments buttons on every row are replaced by one "⋯" menu: Edit, Comments (project tasks) and Delete (if you can edit). Tapping the row still edits it.
+  - On phones a row can be swiped: right to tick it off (or back on), left to delete it, with Undo as before. There's a haptic tap on each.
 
 ---
 

@@ -3,11 +3,13 @@ import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:taskly/app/router.dart';
+import 'package:taskly/app/theme/priority_colors.dart';
 import 'package:taskly/features/tasks/domain/task_repeat.dart';
 import 'package:taskly/features/tasks/presentation/task_card.dart';
 
 import '../../helpers/due_dates.dart';
 import '../../helpers/pump_app.dart';
+import '../../helpers/task_actions.dart';
 
 void main() {
   late FakeFirebaseFirestore firestore;
@@ -84,6 +86,82 @@ void main() {
 
   Future<Map<String, Object?>> onlyTaskIn(String collection) async =>
       (await firestore.collection(collection).get()).docs.single.data();
+
+  group('the task row', () {
+    testWidgets('shows the priority only when it is high', (tester) async {
+      await seedTask('tasks/a', title: 'Pay rent', priority: 'immediate');
+      await seedTask('tasks/b', title: 'Buy milk', order: 2);
+      await pumpTasks(tester);
+
+      expect(
+        find.descendant(
+          of: cardFor('Pay rent'),
+          matching: find.text('Immediate'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: cardFor('Buy milk'), matching: find.text('Medium')),
+        findsNothing,
+      );
+      // An empty box says it hasn't been started.
+      expect(find.text('Not started'), findsNothing);
+    });
+
+    testWidgets('the box is drawn in the priority colour', (tester) async {
+      await seedTask('tasks/a', title: 'Pay rent', priority: 'immediate');
+      await seedTask('tasks/b', title: 'Buy milk', priority: 'low', order: 2);
+      await pumpTasks(tester);
+      final context = tester.element(cardFor('Pay rent'));
+      final colors = Theme.of(context).extension<PriorityColors>()!;
+
+      expect(
+        tester.widget<Checkbox>(checkboxFor('Pay rent')).side?.color,
+        colors.immediate,
+      );
+      expect(tester.widget<Checkbox>(checkboxFor('Buy milk')).side, isNull);
+    });
+
+    testWidgets('on a phone, swiping right ticks it off', (tester) async {
+      await seedTask('tasks/t1', title: 'Buy milk');
+      await pumpTasks(tester);
+
+      await tester.drag(cardFor('Buy milk'), const Offset(300, 0));
+      await tester.pumpAndSettle();
+
+      expect((await firestore.doc('tasks/t1').get())['status'], 'complete');
+      expect(tester.widget<Checkbox>(checkboxFor('Buy milk')).value, isTrue);
+    });
+
+    testWidgets('on a phone, swiping left deletes it, with Undo', (
+      tester,
+    ) async {
+      await seedTask('tasks/t1', title: 'Buy milk');
+      await pumpTasks(tester);
+
+      await tester.drag(cardFor('Buy milk'), const Offset(-300, 0));
+      await tester.pumpAndSettle();
+      expect(find.byType(TaskCard), findsNothing);
+      expect(find.text('Deleted "Buy milk".'), findsOneWidget);
+
+      await tester.tap(find.text('Undo'));
+      await tester.pumpAndSettle();
+      expect(find.byType(TaskCard), findsOneWidget);
+      expect((await firestore.doc('tasks/t1').get()).exists, isTrue);
+    });
+
+    testWidgets('on a wide window, it is not swiped', (tester) async {
+      await seedTask('tasks/t1', title: 'Buy milk');
+      await pumpApp(
+        tester,
+        user: testUser,
+        firestore: firestore,
+        location: Routes.tasks,
+        size: const Size(1000, 800),
+      );
+      expect(find.byType(Dismissible), findsNothing);
+    });
+  });
 
   group('personal tasks', () {
     testWidgets('with no tasks, invites the user to add one', (tester) async {
@@ -201,8 +279,7 @@ void main() {
       await seedTask('tasks/t1', title: 'Buy milk');
       await pumpTasks(tester);
 
-      await tester.tap(find.byTooltip('Delete "Buy milk"'));
-      await tester.pumpAndSettle();
+      await tapTaskAction(tester, 'Buy milk', 'Delete');
       expect(find.byType(TaskCard), findsNothing);
       expect(find.text('Deleted "Buy milk".'), findsOneWidget);
       expect((await firestore.doc('tasks/t1').get()).exists, isTrue);
@@ -217,8 +294,7 @@ void main() {
       await seedTask('tasks/t1', title: 'Buy milk');
       await pumpTasks(tester);
 
-      await tester.tap(find.byTooltip('Delete "Buy milk"'));
-      await tester.pumpAndSettle();
+      await tapTaskAction(tester, 'Buy milk', 'Delete');
       await tester.tap(find.text('Undo'));
       await tester.pumpAndSettle();
 
@@ -281,7 +357,7 @@ void main() {
       await pumpTasks(tester, location: Routes.project('p1'));
 
       expect(find.text('Add task'), findsNothing);
-      expect(find.byTooltip('Delete "Mine"'), findsNothing);
+      expect(await taskActions(tester, 'Mine'), ['Comments']);
       expect(tester.widget<Checkbox>(checkboxFor('Theirs')).onChanged, isNull);
 
       await tester.tap(checkboxFor('Mine'));
@@ -560,7 +636,7 @@ void main() {
       );
       await pumpTasks(tester);
 
-      expect(find.byTooltip('Delete "Proofread"'), findsNothing);
+      expect(await taskActions(tester, 'Proofread'), ['Comments']);
       await tester.tap(find.text('Proofread'));
       await tester.pumpAndSettle();
       expect(find.text('Edit task'), findsNothing);
