@@ -15,6 +15,7 @@ import '../data/my_tasks_provider.dart';
 import '../domain/my_task.dart';
 import '../domain/task_filter.dart';
 import 'my_task_card.dart';
+import 'quick_add_field.dart';
 import 'task_calendar.dart';
 import 'task_filter_bar.dart';
 import 'visible_tasks.dart';
@@ -44,21 +45,50 @@ class TasksPage extends ConsumerWidget {
         label: const Text('New task'),
       ),
       body: switch (items) {
-        AsyncData(:final value) => switch (value) {
-          [] => EmptyState(
-            icon: Icons.task_alt_outlined,
-            title: 'No tasks yet',
-            message:
-                'Add the things you need to do yourself. Project tasks '
-                'assigned to you show up here too.',
-            action: FilledButton.icon(
-              onPressed: () => showTaskForm(context),
-              icon: const Icon(Icons.add),
-              label: const Text('Add a task'),
+        AsyncData(:final value) => Column(
+          children: [
+            _Width(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.md,
+                  AppSpacing.md,
+                  AppSpacing.md,
+                  0,
+                ),
+                child: QuickAddField(
+                  // Quick add makes personal tasks, so their labels.
+                  knownLabels: labelsInUse([
+                    for (final item in value)
+                      if (item.project == null) item.task.labels,
+                  ]),
+                  // From the calendar, due on the day that's chosen.
+                  defaultDueDate: switch (ref.watch(tasksViewProvider)) {
+                    TasksView.calendar => ref.watch(calendarDayProvider),
+                    TasksView.list => null,
+                  },
+                ),
+              ),
             ),
-          ),
-          final visible => _FilteredTasks(visible),
-        },
+            Expanded(
+              child: switch (value) {
+                [] => EmptyState(
+                  icon: Icons.task_alt_outlined,
+                  title: 'No tasks yet',
+                  message:
+                      'Type one in the box above, like "Call Bob tomorrow '
+                      '!high". Project tasks assigned to you show up here '
+                      'too.',
+                  action: FilledButton.icon(
+                    onPressed: () => showTaskForm(context),
+                    icon: const Icon(Icons.add),
+                    label: const Text('Add a task'),
+                  ),
+                ),
+                final visible => _FilteredTasks(visible),
+              },
+            ),
+          ],
+        ),
         AsyncError() => ErrorState(
           message: "Couldn't load your tasks.",
           onRetry: () => ref

@@ -343,6 +343,12 @@ Tier A is what makes this feel like a real product. The rest is optional.
   - Everything else is on one line under the title: due date, repeat, checklist, labels (a dot and the name, not a pill), assignee and project. The description shows one line.
   - The trash and comments buttons on every row are replaced by one "⋯" menu: Edit, Comments (project tasks) and Delete (if you can edit). Tapping the row still edits it.
   - On phones a row can be swiped: right to tick it off (or back on), left to delete it, with Undo as before. There's a haptic tap on each.
+- [x] **Quick add** at the top of the Tasks page: type a task on one line, with its details, and press Enter.
+  - "Renew passport fri !high #errands" adds "Renew passport", due this Friday, high priority, labelled Errands. Dates: today, tomorrow (tmr), weekdays (friday or fri), next week, next month, next friday, in 3 days/weeks/months, and oct 23 or 23 october (next year's if it has passed). Priority: !urgent, !high, !medium, !low, or !1 to !4 and p1 to p4. Labels: #name, using the colour of a label already on your personal tasks, or a new one in a colour not used yet.
+  - What's recognised is highlighted in the box as it's typed and spelled out underneath ("Due Fri, Oct 23", "High priority", the labels), so a word read by mistake is easy to spot. "sat", "sun" and "wed" aren't read as days, since they're also words.
+  - Enter adds the task and leaves the box ready for the next. The expand button opens the full form with what's been typed. In the calendar, a task with no date typed is due on the chosen day.
+  - It makes personal tasks, the same as "New task". The "New task" button and the N shortcut still open the full form.
+  - The parsing is done in the app, by rules, so it works offline and costs nothing. The AI version below could still handle looser phrasing.
 
 ---
 

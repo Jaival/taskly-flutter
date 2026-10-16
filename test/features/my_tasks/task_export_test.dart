@@ -373,7 +373,10 @@ void main() {
       await seedTask('a', title: 'Send the invoice', priority: 'high');
       await seedTask('b', title: 'Call the printer');
       await pumpTasks(tester);
-      await tester.enterText(find.byType(TextField), 'invoice');
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Search tasks'),
+        'invoice',
+      );
       await tester.pumpAndSettle();
 
       await export(tester, 'Export spreadsheet (.csv)');

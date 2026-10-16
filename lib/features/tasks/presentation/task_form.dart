@@ -30,6 +30,9 @@ Future<bool> showTaskForm(
   String? projectId,
   Map<String, String>? members,
   DateTime? dueDate,
+  String? title,
+  Priority? priority,
+  List<TaskLabel> labels = const [],
 }) async =>
     await showAdaptiveSheet<bool>(
       context,
@@ -38,6 +41,9 @@ Future<bool> showTaskForm(
         projectId: projectId,
         members: members,
         dueDate: dueDate,
+        title: title,
+        priority: priority,
+        labels: labels,
       ),
     ) ??
     false;
@@ -49,6 +55,9 @@ class TaskForm extends ConsumerStatefulWidget {
     this.projectId,
     this.members,
     this.dueDate,
+    this.title,
+    this.priority,
+    this.labels = const [],
   });
 
   /// Null to create a new task.
@@ -65,6 +74,12 @@ class TaskForm extends ConsumerStatefulWidget {
   /// The due date a new task starts with. Ignored when editing.
   final DateTime? dueDate;
 
+  /// What else a new task starts with, as typed in quick add. Ignored when
+  /// editing.
+  final String? title;
+  final Priority? priority;
+  final List<TaskLabel> labels;
+
   @override
   ConsumerState<TaskForm> createState() => _TaskFormState();
 }
@@ -73,11 +88,14 @@ class _TaskFormState extends ConsumerState<TaskForm> {
   final _formKey = GlobalKey<FormState>();
   // Created once with the form, not in build(). v1 set the text in build(),
   // which wiped what you'd typed whenever a dropdown changed.
-  late final _title = TextEditingController(text: widget.task?.title);
+  late final _title = TextEditingController(
+    text: widget.task?.title ?? widget.title,
+  );
   late final _description = TextEditingController(
     text: widget.task?.description,
   );
-  late Priority _priority = widget.task?.priority ?? Priority.medium;
+  late Priority _priority =
+      widget.task?.priority ?? widget.priority ?? Priority.medium;
   late TaskStatus _status = widget.task?.status ?? TaskStatus.notStarted;
   late DateTime? _dueDate = switch (widget.task) {
     final task? => task.dueDate,
@@ -85,7 +103,7 @@ class _TaskFormState extends ConsumerState<TaskForm> {
   };
   late TaskRepeat? _repeat = widget.task?.repeat;
   late List<ChecklistItem> _checklist = widget.task?.checklist ?? const [];
-  late List<TaskLabel> _labels = widget.task?.labels ?? const [];
+  late List<TaskLabel> _labels = widget.task?.labels ?? widget.labels;
   // Shows _dueDate; the field is read-only and opens a date picker.
   final _dueText = TextEditingController();
   // Someone who has left the project shows as unassigned.

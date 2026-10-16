@@ -87,6 +87,94 @@ void main() {
   Future<Map<String, Object?>> onlyTaskIn(String collection) async =>
       (await firestore.collection(collection).get()).docs.single.data();
 
+  group('quick add', () {
+    final quickAdd = find.widgetWithText(TextField, 'Quick add');
+
+    Future<List<Map<String, dynamic>>> savedTasks() async => [
+      for (final doc in (await firestore.collection('tasks').get()).docs)
+        doc.data(),
+    ];
+
+    testWidgets('adds a task with the details typed in', (tester) async {
+      await pumpTasks(tester);
+
+      await tester.enterText(quickAdd, 'Buy milk tomorrow !high #errands');
+      await tester.pumpAndSettle();
+      // What it understood, before adding.
+      expect(find.text('High priority'), findsOneWidget);
+      expect(find.text('errands'), findsOneWidget);
+
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+
+      final [saved] = await savedTasks();
+      expect(saved['title'], 'Buy milk');
+      expect(saved['priority'], 'high');
+      expect(saved['dueDate'], dueTimestamp(1));
+      expect(saved['labels'], [
+        {'name': 'errands', 'color': isA<String>()},
+      ]);
+      expect(find.widgetWithText(TaskCard, 'Buy milk'), findsOneWidget);
+      // Ready for the next one.
+      expect(tester.widget<TextField>(quickAdd).controller!.text, isEmpty);
+    });
+
+    testWidgets('a known label keeps its colour', (tester) async {
+      await seedTask(
+        'tasks/t1',
+        title: 'Old',
+        labels: [
+          {'name': 'Errands', 'color': 'teal'},
+        ],
+      );
+      await pumpTasks(tester);
+
+      await tester.enterText(quickAdd, 'New one #errands');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Add task'));
+      await tester.pumpAndSettle();
+
+      final added = (await savedTasks()).firstWhere(
+        (t) => t['title'] == 'New one',
+      );
+      expect(added['labels'], [
+        {'name': 'Errands', 'color': 'teal'},
+      ]);
+    });
+
+    testWidgets('without a title, nothing is added', (tester) async {
+      await pumpTasks(tester);
+
+      await tester.enterText(quickAdd, 'tomorrow !high');
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<IconButton>(
+              find.widgetWithIcon(IconButton, Icons.arrow_upward),
+            )
+            .onPressed,
+        isNull,
+      );
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(await savedTasks(), isEmpty);
+    });
+
+    testWidgets('"More options" opens the form with what was typed', (
+      tester,
+    ) async {
+      await pumpTasks(tester);
+
+      await tester.enterText(quickAdd, 'Pay rent !urgent');
+      await tester.tap(find.byTooltip('More options'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('New task'), findsWidgets);
+      expect(find.widgetWithText(TextFormField, 'Pay rent'), findsOneWidget);
+      expect(find.text('Immediate'), findsWidgets);
+    });
+  });
+
   group('the task row', () {
     testWidgets('shows the priority only when it is high', (tester) async {
       await seedTask('tasks/a', title: 'Pay rent', priority: 'immediate');
