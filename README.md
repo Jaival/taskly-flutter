@@ -12,6 +12,7 @@ Taskly started as an internship project in 2021. Version 2 is a rewrite on curre
 
 **Tasks**
 - Personal tasks, and project tasks assigned to you, on one page. Grouped into Overdue, Today, Upcoming, No due date and Done.
+- Quick add: type "Renew passport fri !high #errands" and press Enter. Swipe a task on a phone to tick it off or delete it.
 - Due dates, priorities, statuses, checklists, and labels in nine colours.
 - Tasks that repeat every day, week or month. Ticking one off adds the next.
 - Search, filters (priority, status, due, project, label) and sorting. A month calendar of what's due. A default view and sort in Settings.
@@ -19,6 +20,7 @@ Taskly started as an internship project in 2021. Version 2 is a rewrite on curre
 
 **Projects and teams**
 - A list or a board for each project. Drag cards between columns, or use the card's menu.
+- On a wide screen, a sidebar lists every project with its open tasks.
 - Invite people by email as editors or viewers. Viewers can tick off their own tasks, and nothing else.
 - Comments on tasks, and a log of every change ("Alex moved this to In progress").
 

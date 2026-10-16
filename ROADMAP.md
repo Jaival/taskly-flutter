@@ -349,6 +349,10 @@ Tier A is what makes this feel like a real product. The rest is optional.
   - Enter adds the task and leaves the box ready for the next. The expand button opens the full form with what's been typed. In the calendar, a task with no date typed is due on the chosen day.
   - It makes personal tasks, the same as "New task". The "New task" button and the N shortcut still open the full form.
   - The parsing is done in the app, by rules, so it works offline and costs nothing. The AI version below could still handle looser phrasing.
+- [x] **Desktop sidebar** in place of the navigation drawer, on windows 1200 wide or more.
+  - Home, Projects, Tasks and Shared with how much is in each (projects, open tasks, invites waiting), then a Projects section listing every project with a dot in its priority's colour and its open tasks. One click opens a project, and the open one is highlighted. A "+" beside the heading starts a new project.
+  - Fixed on the way: on tablets and desktops, screen readers couldn't reach the navigation at all. The page's route hides the semantics of whatever is painted before it, and the rail and drawer are painted before the page. The page now has its own semantics container, and a test checks the rail and sidebar are reachable.
+  - Sidebar rows are 48 high, the smallest comfortable tap target. With many projects the sidebar scrolls; it doesn't collapse to icons yet.
 
 ---
 

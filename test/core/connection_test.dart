@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:taskly/features/projects/presentation/project_detail_page.dart';
 import 'package:taskly/core/data/connection.dart';
 import 'package:taskly/core/domain/project_role.dart';
 import 'package:taskly/core/widgets/offline_banner.dart';
@@ -224,7 +225,15 @@ void main() {
         );
 
         expect(find.textContaining(notice), findsOneWidget);
-        expect(find.text('Launch'), findsOneWidget);
+        // The project's page. (On a wide window the sidebar has its name
+        // too.)
+        expect(
+          find.descendant(
+            of: find.byType(ProjectDetailPage),
+            matching: find.text('Launch'),
+          ),
+          findsOneWidget,
+        );
       }
     });
 
