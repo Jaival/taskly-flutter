@@ -77,8 +77,15 @@ void main() {
     await tester.tap(
       find.descendant(of: card, matching: find.byType(Checkbox)),
     );
+    // Done once its box is ticked. (Rows show a status only while a task is
+    // in progress.)
     await tester.pumpUntilFound(
-      find.descendant(of: card, matching: find.text('Complete')),
+      find.descendant(
+        of: card,
+        matching: find.byWidgetPredicate(
+          (widget) => widget is Checkbox && widget.value == true,
+        ),
+      ),
     );
 
     // On the server, not just on this device: the rules let it all through.
