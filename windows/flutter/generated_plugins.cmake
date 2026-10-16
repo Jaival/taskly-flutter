@@ -5,6 +5,7 @@
 list(APPEND FLUTTER_PLUGIN_LIST
   cloud_firestore
   connectivity_plus
+  dynamic_color
   firebase_auth
   firebase_core
   share_plus

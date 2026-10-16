@@ -10,7 +10,7 @@ Taskly is a Flutter **web** task and project manager backed by Firebase Auth and
 | Approach | **Rewrite one feature at a time** | No null-safety migration of old code. Each feature is rebuilt with the new architecture and UI in one pass. |
 | State management | Riverpod (`flutter_riverpod` 3.x) | |
 | Routing | `go_router` | Real URLs, deep links, browser back button |
-| UI | Material 3, seeded from the existing brand purple `#54458D` | |
+| UI | Material 3, seeded from the existing brand purple `#54458D` | Later restyled after shadcn/ui, with colour themes and the device's own (Phase 4, Tier D) |
 
 ## Phases
 
@@ -329,6 +329,15 @@ Tier A is what makes this feel like a real product. The rest is optional.
   - It's a snapshot: the file doesn't update when the tasks do. Importing a newer export updates the same events in calendars that support it, and may duplicate them in others.
   - Events rather than to-dos, because Google Calendar and Outlook ignore to-dos in an imported file.
   - The files were checked by reading them, on Android and in Chrome. They haven't been imported into an actual spreadsheet or calendar program yet.
+
+- [x] **Colour themes**, after shadcn/ui's approach: mostly greys, with the accent only on actions and selections.
+  - Settings has an Appearance section: Light, Dark or System, and seven themes (Taskly Violet, the default, then Mono, Ocean, Emerald, Rose and Ember). Each pairs a shadcn base grey (zinc, neutral, slate or stone) with one accent. Kept on the device, like the Tasks defaults.
+  - Explicit colour schemes (`lib/app/theme/app_palette.dart`) instead of `ColorScheme.fromSeed`. Cards, dialogs and menus are flat, with a thin border instead of a shadow. Radii are 6, 8, 10 and 14, and the font is Inter instead of Montserrat.
+  - Priority chips are a dot of the priority's colour on a tint of it, with ordinary text, so they read the same in every theme. Low priority is grey. Where a priority's colour would match the accent, it changes: medium is violet in Ocean, and high is amber in Ember.
+  - A seventh, **Device colours**, follows the device's own theme with the `dynamic_color` package: on Android 12 and later the colours Material You takes from the wallpaper, and on Windows, macOS and Linux the system accent colour. It keeps the zinc greys and takes only the accent (and the text colour on it) from the device. It's first in the picker where the device has colours, and not shown where it has none (the web, iOS, older Android). If a priority's colour is within 30° of the device's accent, it moves, as in Ocean and Ember.
+  - Tried on the Android emulator (Android 37): the tile appears first, picking it takes the wallpaper's accent, and after changing the system colour to green the app came back green.
+  - A test checks every theme, light and dark, for 4.5:1 contrast on text and button labels. That made the light Rose and Ember accents a shade darker than shadcn's.
+  - Only the colours, shapes and font change here. The task row redesign, quick add and the desktop sidebar from the same review are still to do. The README screenshots show the old look.
 
 ---
 

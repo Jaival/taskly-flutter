@@ -4,7 +4,8 @@ import '../../app/theme/app_spacing.dart';
 import '../../app/theme/priority_colors.dart';
 import '../domain/priority.dart';
 
-/// A small coloured label for a priority, used on project and task cards.
+/// A small label for a priority, used on project and task cards: its name
+/// beside a dot of its colour, on a tint of it.
 class PriorityChip extends StatelessWidget {
   const PriorityChip(this.priority, {super.key});
 
@@ -23,15 +24,32 @@ class PriorityChip extends StatelessWidget {
           vertical: AppSpacing.xs / 2,
         ),
         decoration: BoxDecoration(
-          color: colors.of(priority),
-          borderRadius: AppRadius.smAll,
+          color: colors.tint(priority, theme.colorScheme.surface),
+          borderRadius: AppRadius.xsAll,
         ),
-        child: Text(
-          priority.label,
-          style: theme.textTheme.labelSmall?.copyWith(
-            color: colors.onPriority,
-            fontWeight: FontWeight.w600,
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                color: colors.of(priority),
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: AppSpacing.xs),
+            Flexible(
+              child: Text(
+                priority.label,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onSurface,
+                  fontWeight: FontWeight.w600,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
         ),
       ),
     );

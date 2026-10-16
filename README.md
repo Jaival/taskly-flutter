@@ -26,7 +26,7 @@ Taskly started as an internship project in 2021. Version 2 is a rewrite on curre
 - Sign in with email and password, or with Google. Change your password or delete your account from your profile.
 - Works offline: changes are kept on the device and sent when you're back online.
 - Installs as an app from the browser, and offers new versions without interrupting you.
-- Light and dark mode, keyboard shortcuts, screen-reader labels, and text that scales to 200%.
+- Six colour themes, or your phone's own colours (Material You on Android 12+), each in light and dark, picked in Settings. Keyboard shortcuts, screen-reader labels, and text that scales to 200%.
 
 | Board | Tasks, in dark mode |
 |---|---|

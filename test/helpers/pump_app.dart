@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:taskly/app/app.dart';
 import 'package:taskly/app/router.dart';
 import 'package:taskly/app/theme/app_theme.dart';
+import 'package:taskly/app/theme/device_colors.dart';
 import 'package:taskly/core/data/connection.dart';
 import 'package:taskly/core/data/file_export.dart';
 import 'package:taskly/core/data/firestore_provider.dart';
@@ -35,8 +36,9 @@ void setWindowSize(WidgetTester tester, Size size) {
 /// Firestore. Pass [auth] or [firestore] to set them up or inspect them,
 /// [online] to take the device offline (it's online until told otherwise),
 /// [webApp] to play the browser offering an update or to install the app,
-/// [saveFile] to catch exported files, and [preferences] to start with
-/// settings saved or to inspect them.
+/// [saveFile] to catch exported files, [preferences] to start with
+/// settings saved or to inspect them, and [deviceColors] to play a device
+/// with colours of its own (it has none until told otherwise).
 Future<FakeAuthRepository> pumpApp(
   WidgetTester tester, {
   AppUser? user,
@@ -46,6 +48,7 @@ Future<FakeAuthRepository> pumpApp(
   WebApp? webApp,
   SaveFile? saveFile,
   MemoryPreferences? preferences,
+  DeviceColors? deviceColors,
   String location = Routes.landing,
   Size size = const Size(400, 800),
 }) async {
@@ -65,6 +68,7 @@ Future<FakeAuthRepository> pumpApp(
       // The real one stores on the platform, which tests don't have.
       preferencesProvider.overrideWithValue(preferences ?? MemoryPreferences()),
       if (saveFile != null) saveFileProvider.overrideWithValue(saveFile),
+      deviceColorsProvider.overrideWith((ref) async => deviceColors),
       // Google Fonts would try to download fonts during tests.
       appThemeProvider.overrideWithValue(
         const AppTheme(textThemeBuilder: _defaultFont),
