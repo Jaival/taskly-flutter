@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../../core/domain/priority.dart';
+import 'app_palette.dart';
 
-/// Brand colours for task and project priorities, tuned for light and dark mode.
+/// Colours for task and project priorities, from the current palette.
+///
+/// A priority is drawn as a dot of its colour on a faint tint of it, with
+/// the usual text colour, so the text is as easy to read in every palette.
 ///
 /// Read with `Theme.of(context).extension<PriorityColors>()!`.
 @immutable
@@ -12,18 +16,23 @@ class PriorityColors extends ThemeExtension<PriorityColors> {
     required this.high,
     required this.medium,
     required this.low,
-    required this.onPriority,
   });
+
+  /// Low priority is grey: only the others call for attention.
+  PriorityColors.fromTokens(PaletteTokens tokens)
+    : this(
+        immediate: tokens.urgent,
+        high: tokens.high,
+        medium: tokens.medium,
+        low: tokens.mutedForeground,
+      );
 
   final Color immediate;
   final Color high;
   final Color medium;
   final Color low;
 
-  /// Foreground colour for text and icons drawn on any priority colour.
-  final Color onPriority;
-
-  /// The background colour for [priority].
+  /// The colour for [priority].
   Color of(Priority priority) => switch (priority) {
     Priority.immediate => immediate,
     Priority.high => high,
@@ -31,21 +40,9 @@ class PriorityColors extends ThemeExtension<PriorityColors> {
     Priority.low => low,
   };
 
-  static const light = PriorityColors(
-    immediate: Color(0xFFF05D5E),
-    high: Color(0xFFFFBA49),
-    medium: Color(0xFFFFE381),
-    low: Color(0xFF61E294),
-    onPriority: Color(0xFF1C1B1F),
-  );
-
-  static const dark = PriorityColors(
-    immediate: Color(0xFFE57373),
-    high: Color(0xFFE0A845),
-    medium: Color(0xFFD9C36E),
-    low: Color(0xFF5BC487),
-    onPriority: Color(0xFF1C1B1F),
-  );
+  /// The background for a chip of [priority], over [surface].
+  Color tint(Priority priority, Color surface) =>
+      Color.alphaBlend(of(priority).withValues(alpha: 0.14), surface);
 
   @override
   PriorityColors copyWith({
@@ -53,14 +50,12 @@ class PriorityColors extends ThemeExtension<PriorityColors> {
     Color? high,
     Color? medium,
     Color? low,
-    Color? onPriority,
   }) {
     return PriorityColors(
       immediate: immediate ?? this.immediate,
       high: high ?? this.high,
       medium: medium ?? this.medium,
       low: low ?? this.low,
-      onPriority: onPriority ?? this.onPriority,
     );
   }
 
@@ -72,7 +67,6 @@ class PriorityColors extends ThemeExtension<PriorityColors> {
       high: Color.lerp(high, other.high, t)!,
       medium: Color.lerp(medium, other.medium, t)!,
       low: Color.lerp(low, other.low, t)!,
-      onPriority: Color.lerp(onPriority, other.onPriority, t)!,
     );
   }
 }

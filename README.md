@@ -12,6 +12,7 @@ Taskly started as an internship project in 2021. Version 2 is a rewrite on curre
 
 **Tasks**
 - Personal tasks, and project tasks assigned to you, on one page. Grouped into Overdue, Today, Upcoming, No due date and Done.
+- Quick add: type "Renew passport fri !high #errands" and press Enter. Swipe a task on a phone to tick it off or delete it.
 - Due dates, priorities, statuses, checklists, and labels in nine colours.
 - Tasks that repeat every day, week or month. Ticking one off adds the next.
 - Search, filters (priority, status, due, project, label) and sorting. A month calendar of what's due. A default view and sort in Settings.
@@ -19,6 +20,7 @@ Taskly started as an internship project in 2021. Version 2 is a rewrite on curre
 
 **Projects and teams**
 - A list or a board for each project. Drag cards between columns, or use the card's menu.
+- On a wide screen, a sidebar lists every project with its open tasks.
 - Invite people by email as editors or viewers. Viewers can tick off their own tasks, and nothing else.
 - Comments on tasks, and a log of every change ("Alex moved this to In progress").
 
@@ -26,7 +28,7 @@ Taskly started as an internship project in 2021. Version 2 is a rewrite on curre
 - Sign in with email and password, or with Google. Change your password or delete your account from your profile.
 - Works offline: changes are kept on the device and sent when you're back online.
 - Installs as an app from the browser, and offers new versions without interrupting you.
-- Light and dark mode, keyboard shortcuts, screen-reader labels, and text that scales to 200%.
+- Six colour themes, or your phone's own colours (Material You on Android 12+), each in light and dark, picked in Settings. Keyboard shortcuts, screen-reader labels, and text that scales to 200%.
 
 | Board | Tasks, in dark mode |
 |---|---|

@@ -94,3 +94,36 @@ class TaskLabels extends StatelessWidget {
     );
   }
 }
+
+/// A label as a dot and its name, without a background: for the one line
+/// of details on a task row, where pills would crowd it.
+class InlineLabel extends StatelessWidget {
+  const InlineLabel(this.label, {super.key});
+
+  final TaskLabel label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Semantics(
+      label: 'Label: ${label.name}',
+      excludeSemantics: true,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          LabelDot(label.color),
+          const SizedBox(width: AppSpacing.xs),
+          Flexible(
+            child: Text(
+              label.name,
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

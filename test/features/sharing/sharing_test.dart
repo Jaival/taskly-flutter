@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:taskly/features/projects/presentation/shared_page.dart';
 import 'package:taskly/app/router.dart';
 import 'package:taskly/features/auth/domain/app_user.dart';
 import 'package:taskly/features/projects/presentation/project_detail_page.dart';
@@ -257,8 +258,13 @@ void main() {
       await pump(tester, location: Routes.shared);
 
       expect(find.text('Shared with me'), findsOneWidget);
-      expect(find.text('Project p2'), findsOneWidget);
-      expect(find.text('Launch'), findsNothing);
+      // On the page: the sidebar lists every project.
+      Finder onPage(String text) => find.descendant(
+        of: find.byType(SharedPage),
+        matching: find.text(text),
+      );
+      expect(onPage('Project p2'), findsOneWidget);
+      expect(onPage('Launch'), findsNothing);
     });
 
     testWidgets('an unverified email sees no invites, and why', (tester) async {

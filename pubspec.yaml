@@ -10,6 +10,7 @@ environment:
 dependencies:
   cloud_firestore: ^6.10.0
   connectivity_plus: ^7.3.1
+  dynamic_color: ^2.1.0
   firebase_auth: ^6.7.0
   firebase_core: ^4.15.0
   flutter:
@@ -45,16 +46,16 @@ flutter:
 flutter_launcher_icons:
   image_path: "assets/icon/icon.png"
   android: true
-  adaptive_icon_background: "#54458D"
+  adaptive_icon_background: "#6148D1"
   adaptive_icon_foreground: "assets/icon/foreground.png"
   adaptive_icon_monochrome: "assets/icon/foreground.png"
   ios: true
   remove_alpha_ios: true
-  background_color_ios: "#54458D"
+  background_color_ios: "#6148D1"
   web:
     generate: true
-    background_color: "#54458D"
-    theme_color: "#54458D"
+    background_color: "#6148D1"
+    theme_color: "#6148D1"
   windows:
     generate: true
     icon_size: 256

@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/router.dart';
 import '../../../app/theme/app_spacing.dart';
+import '../../../core/widgets/taskly_logo.dart';
 
 /// `/`: what Taskly is, for people who aren't signed in.
 ///
@@ -12,7 +13,6 @@ class LandingPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final wide = MediaQuery.sizeOf(context).width >= Breakpoints.medium;
 
     return Scaffold(
@@ -20,7 +20,7 @@ class LandingPage extends StatelessWidget {
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.task_alt, color: theme.colorScheme.primary),
+            const TasklyLogo(size: 28),
             const SizedBox(width: AppSpacing.sm),
             const Flexible(
               child: Text('Taskly', overflow: TextOverflow.ellipsis),

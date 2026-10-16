@@ -3,11 +3,13 @@ import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:taskly/app/router.dart';
+import 'package:taskly/app/theme/priority_colors.dart';
 import 'package:taskly/features/tasks/domain/task_repeat.dart';
 import 'package:taskly/features/tasks/presentation/task_card.dart';
 
 import '../../helpers/due_dates.dart';
 import '../../helpers/pump_app.dart';
+import '../../helpers/task_actions.dart';
 
 void main() {
   late FakeFirebaseFirestore firestore;
@@ -84,6 +86,170 @@ void main() {
 
   Future<Map<String, Object?>> onlyTaskIn(String collection) async =>
       (await firestore.collection(collection).get()).docs.single.data();
+
+  group('quick add', () {
+    final quickAdd = find.widgetWithText(TextField, 'Quick add');
+
+    Future<List<Map<String, dynamic>>> savedTasks() async => [
+      for (final doc in (await firestore.collection('tasks').get()).docs)
+        doc.data(),
+    ];
+
+    testWidgets('adds a task with the details typed in', (tester) async {
+      await pumpTasks(tester);
+
+      await tester.enterText(quickAdd, 'Buy milk tomorrow !high #errands');
+      await tester.pumpAndSettle();
+      // What it understood, before adding.
+      expect(find.text('High priority'), findsOneWidget);
+      expect(find.text('errands'), findsOneWidget);
+
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+
+      final [saved] = await savedTasks();
+      expect(saved['title'], 'Buy milk');
+      expect(saved['priority'], 'high');
+      expect(saved['dueDate'], dueTimestamp(1));
+      expect(saved['labels'], [
+        {'name': 'errands', 'color': isA<String>()},
+      ]);
+      expect(find.widgetWithText(TaskCard, 'Buy milk'), findsOneWidget);
+      // Ready for the next one.
+      expect(tester.widget<TextField>(quickAdd).controller!.text, isEmpty);
+    });
+
+    testWidgets('a known label keeps its colour', (tester) async {
+      await seedTask(
+        'tasks/t1',
+        title: 'Old',
+        labels: [
+          {'name': 'Errands', 'color': 'teal'},
+        ],
+      );
+      await pumpTasks(tester);
+
+      await tester.enterText(quickAdd, 'New one #errands');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Add task'));
+      await tester.pumpAndSettle();
+
+      final added = (await savedTasks()).firstWhere(
+        (t) => t['title'] == 'New one',
+      );
+      expect(added['labels'], [
+        {'name': 'Errands', 'color': 'teal'},
+      ]);
+    });
+
+    testWidgets('without a title, nothing is added', (tester) async {
+      await pumpTasks(tester);
+
+      await tester.enterText(quickAdd, 'tomorrow !high');
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<IconButton>(
+              find.widgetWithIcon(IconButton, Icons.arrow_upward),
+            )
+            .onPressed,
+        isNull,
+      );
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(await savedTasks(), isEmpty);
+    });
+
+    testWidgets('"More options" opens the form with what was typed', (
+      tester,
+    ) async {
+      await pumpTasks(tester);
+
+      await tester.enterText(quickAdd, 'Pay rent !urgent');
+      await tester.tap(find.byTooltip('More options'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('New task'), findsWidgets);
+      expect(find.widgetWithText(TextFormField, 'Pay rent'), findsOneWidget);
+      expect(find.text('Immediate'), findsWidgets);
+    });
+  });
+
+  group('the task row', () {
+    testWidgets('shows the priority only when it is high', (tester) async {
+      await seedTask('tasks/a', title: 'Pay rent', priority: 'immediate');
+      await seedTask('tasks/b', title: 'Buy milk', order: 2);
+      await pumpTasks(tester);
+
+      expect(
+        find.descendant(
+          of: cardFor('Pay rent'),
+          matching: find.text('Immediate'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: cardFor('Buy milk'), matching: find.text('Medium')),
+        findsNothing,
+      );
+      // An empty box says it hasn't been started.
+      expect(find.text('Not started'), findsNothing);
+    });
+
+    testWidgets('the box is drawn in the priority colour', (tester) async {
+      await seedTask('tasks/a', title: 'Pay rent', priority: 'immediate');
+      await seedTask('tasks/b', title: 'Buy milk', priority: 'low', order: 2);
+      await pumpTasks(tester);
+      final context = tester.element(cardFor('Pay rent'));
+      final colors = Theme.of(context).extension<PriorityColors>()!;
+
+      expect(
+        tester.widget<Checkbox>(checkboxFor('Pay rent')).side?.color,
+        colors.immediate,
+      );
+      expect(tester.widget<Checkbox>(checkboxFor('Buy milk')).side, isNull);
+    });
+
+    testWidgets('on a phone, swiping right ticks it off', (tester) async {
+      await seedTask('tasks/t1', title: 'Buy milk');
+      await pumpTasks(tester);
+
+      await tester.drag(cardFor('Buy milk'), const Offset(300, 0));
+      await tester.pumpAndSettle();
+
+      expect((await firestore.doc('tasks/t1').get())['status'], 'complete');
+      expect(tester.widget<Checkbox>(checkboxFor('Buy milk')).value, isTrue);
+    });
+
+    testWidgets('on a phone, swiping left deletes it, with Undo', (
+      tester,
+    ) async {
+      await seedTask('tasks/t1', title: 'Buy milk');
+      await pumpTasks(tester);
+
+      await tester.drag(cardFor('Buy milk'), const Offset(-300, 0));
+      await tester.pumpAndSettle();
+      expect(find.byType(TaskCard), findsNothing);
+      expect(find.text('Deleted "Buy milk".'), findsOneWidget);
+
+      await tester.tap(find.text('Undo'));
+      await tester.pumpAndSettle();
+      expect(find.byType(TaskCard), findsOneWidget);
+      expect((await firestore.doc('tasks/t1').get()).exists, isTrue);
+    });
+
+    testWidgets('on a wide window, it is not swiped', (tester) async {
+      await seedTask('tasks/t1', title: 'Buy milk');
+      await pumpApp(
+        tester,
+        user: testUser,
+        firestore: firestore,
+        location: Routes.tasks,
+        size: const Size(1000, 800),
+      );
+      expect(find.byType(Dismissible), findsNothing);
+    });
+  });
 
   group('personal tasks', () {
     testWidgets('with no tasks, invites the user to add one', (tester) async {
@@ -201,8 +367,7 @@ void main() {
       await seedTask('tasks/t1', title: 'Buy milk');
       await pumpTasks(tester);
 
-      await tester.tap(find.byTooltip('Delete "Buy milk"'));
-      await tester.pumpAndSettle();
+      await tapTaskAction(tester, 'Buy milk', 'Delete');
       expect(find.byType(TaskCard), findsNothing);
       expect(find.text('Deleted "Buy milk".'), findsOneWidget);
       expect((await firestore.doc('tasks/t1').get()).exists, isTrue);
@@ -217,8 +382,7 @@ void main() {
       await seedTask('tasks/t1', title: 'Buy milk');
       await pumpTasks(tester);
 
-      await tester.tap(find.byTooltip('Delete "Buy milk"'));
-      await tester.pumpAndSettle();
+      await tapTaskAction(tester, 'Buy milk', 'Delete');
       await tester.tap(find.text('Undo'));
       await tester.pumpAndSettle();
 
@@ -281,7 +445,7 @@ void main() {
       await pumpTasks(tester, location: Routes.project('p1'));
 
       expect(find.text('Add task'), findsNothing);
-      expect(find.byTooltip('Delete "Mine"'), findsNothing);
+      expect(await taskActions(tester, 'Mine'), ['Comments']);
       expect(tester.widget<Checkbox>(checkboxFor('Theirs')).onChanged, isNull);
 
       await tester.tap(checkboxFor('Mine'));
@@ -560,7 +724,7 @@ void main() {
       );
       await pumpTasks(tester);
 
-      expect(find.byTooltip('Delete "Proofread"'), findsNothing);
+      expect(await taskActions(tester, 'Proofread'), ['Comments']);
       await tester.tap(find.text('Proofread'));
       await tester.pumpAndSettle();
       expect(find.text('Edit task'), findsNothing);

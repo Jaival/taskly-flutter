@@ -6,7 +6,7 @@ import '../../core/domain/task_status.dart';
 /// brand seed and dark mode automatically.
 extension StatusColors on ColorScheme {
   Color statusColor(TaskStatus status) => switch (status) {
-    TaskStatus.notStarted => outline,
+    TaskStatus.notStarted => onSurfaceVariant,
     TaskStatus.inProgress => tertiary,
     TaskStatus.complete => primary,
   };

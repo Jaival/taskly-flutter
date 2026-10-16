@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/data/web_app.dart';
 import 'router.dart';
 import 'theme/app_theme.dart';
+import 'theme/appearance.dart';
+import 'theme/device_colors.dart';
 
 class TasklyApp extends ConsumerWidget {
   const TasklyApp({super.key});
@@ -11,14 +13,16 @@ class TasklyApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = ref.watch(appThemeProvider);
+    final appearance = ref.watch(appearanceProvider);
+    final deviceColors = ref.watch(deviceColorsProvider).value;
     // In a browser, starts keeping a copy of the app for offline use.
     ref.watch(webAppProvider);
     return MaterialApp.router(
       title: 'Taskly',
       debugShowCheckedModeBanner: false,
-      theme: theme.light,
-      darkTheme: theme.dark,
-      themeMode: ThemeMode.system,
+      theme: theme.light(appearance.palette, deviceColors: deviceColors),
+      darkTheme: theme.dark(appearance.palette, deviceColors: deviceColors),
+      themeMode: appearance.mode,
       routerConfig: ref.watch(routerProvider),
     );
   }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:taskly/app/theme/app_palette.dart';
 import 'package:taskly/app/theme/priority_colors.dart';
 import 'package:taskly/core/domain/priority.dart';
 import 'package:taskly/core/domain/task_status.dart';
@@ -27,10 +28,17 @@ void main() {
       ]);
     });
 
-    test('every priority has its own colour', () {
-      final colors = Priority.values.map(PriorityColors.light.of).toSet();
-      expect(colors, hasLength(Priority.values.length));
-      expect(PriorityColors.dark.of(Priority.low), isA<Color>());
+    test('every priority has its own colour, in every palette', () {
+      for (final palette in AppPalette.values) {
+        for (final brightness in Brightness.values) {
+          final colors = PriorityColors.fromTokens(palette.tokens(brightness));
+          expect(
+            Priority.values.map(colors.of).toSet(),
+            hasLength(Priority.values.length),
+            reason: '${palette.name}, ${brightness.name}',
+          );
+        }
+      }
     });
   });
 

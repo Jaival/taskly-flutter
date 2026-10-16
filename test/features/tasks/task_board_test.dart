@@ -3,6 +3,7 @@ import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:taskly/features/projects/presentation/projects_page.dart';
 import 'package:taskly/features/tasks/presentation/task_board.dart';
 import 'package:taskly/features/tasks/presentation/task_card.dart';
 
@@ -185,7 +186,13 @@ void main() {
 
     await tester.tap(find.byTooltip('Back'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Launch'));
+    // Its card on the Projects page, not its row in the sidebar.
+    await tester.tap(
+      find.descendant(
+        of: find.byType(ProjectsPage),
+        matching: find.text('Launch'),
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(boardCard('Write copy'), findsOneWidget);

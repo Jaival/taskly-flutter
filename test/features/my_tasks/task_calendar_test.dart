@@ -231,7 +231,10 @@ void main() {
       await seedTask('b', title: 'Call the printer', due: today);
       await pumpCalendar(tester);
 
-      await tester.enterText(find.byType(TextField), 'invoice');
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Search tasks'),
+        'invoice',
+      );
       await tester.pumpAndSettle();
 
       expect(find.text('Today · 1'), findsOneWidget);
@@ -307,6 +310,30 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.widgetWithText(TaskCard, 'Book the venue'), findsOneWidget);
+      final saved = await firestore
+          .collection('tasks')
+          .where('title', isEqualTo: 'Book the venue')
+          .get();
+      expect(saved.docs.single['dueDate'], _stored(nextMonth));
+    });
+
+    testWidgets('quick add from the calendar is due on the chosen day too', (
+      tester,
+    ) async {
+      await seedTask('a', title: 'Send the invoice', due: today);
+      await pumpCalendar(tester);
+      await tester.tap(find.byTooltip('Next month'));
+      await tester.pumpAndSettle();
+      await tester.tap(dayCell(tester, nextMonth));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Quick add'),
+        'Book the venue',
+      );
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+
       final saved = await firestore
           .collection('tasks')
           .where('title', isEqualTo: 'Book the venue')

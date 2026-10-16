@@ -4,17 +4,24 @@ import 'package:go_router/go_router.dart';
 
 import '../core/data/web_app.dart';
 import '../core/widgets/offline_banner.dart';
+import '../core/widgets/taskly_logo.dart';
 import '../core/widgets/update_banner.dart';
 import '../features/auth/data/auth_repository.dart';
 import '../features/auth/presentation/verify_email_banner.dart';
 import '../features/my_tasks/data/my_tasks_provider.dart';
 import '../features/my_tasks/presentation/tasks_app_bar.dart';
+import '../features/my_tasks/presentation/visible_tasks.dart';
+import '../features/projects/data/project_repository.dart';
+import '../features/projects/domain/project.dart';
+import '../features/projects/presentation/project_form.dart';
 import '../features/projects/presentation/new_project_task.dart';
 import '../features/sharing/data/invite_repository.dart';
+import '../features/tasks/data/task_repository.dart';
 import '../features/tasks/presentation/task_form.dart';
 import 'app_shortcuts.dart';
 import 'router.dart';
 import 'theme/app_spacing.dart';
+import 'theme/priority_colors.dart';
 
 typedef _Destination = ({IconData icon, IconData selectedIcon, String label});
 
@@ -37,7 +44,8 @@ const _tasksIndex = 2;
 const _sharedIndex = 3;
 
 /// Signed-in layout. The navigation adapts to the window width:
-/// bottom bar on phones, rail on tablets, permanent drawer on desktop.
+/// bottom bar on phones, rail on tablets, and on desktop a sidebar that
+/// also lists the projects.
 /// The keyboard shortcuts work on every page inside it, and a banner says
 /// when the device is offline.
 class AppShell extends ConsumerWidget {
@@ -139,37 +147,26 @@ class AppShell extends ConsumerWidget {
                 ),
             ],
           )
-        : NavigationDrawer(
-            selectedIndex: selected,
-            onDestinationSelected: _onSelect,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.xl,
-                  AppSpacing.lg,
-                  AppSpacing.md,
-                  AppSpacing.md,
-                ),
-                child: Text(
-                  'Taskly',
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-              ),
-              for (final (i, d) in _destinations.indexed)
-                NavigationDrawerDestination(
-                  icon: icon(i),
-                  selectedIcon: icon(i, selected: true),
-                  label: Text(d.label),
-                ),
-            ],
+        : _Sidebar(
+            selected: selected,
+            onSelect: _onSelect,
+            projectId: projectId,
+            invites: invites,
           );
 
     return Scaffold(
       body: Row(
         children: [
           navigation,
+          const VerticalDivider(width: 1),
           Expanded(
-            child: Scaffold(appBar: appBar, body: body),
+            // Its own semantics container: the page's route blocks the
+            // semantics of whatever was painted before it, which would
+            // otherwise hide the navigation from screen readers.
+            child: Semantics(
+              container: true,
+              child: Scaffold(appBar: appBar, body: body),
+            ),
           ),
         ],
       ),
@@ -236,6 +233,289 @@ class _AccountMenu extends ConsumerWidget {
           radius: 16,
           child: Text(user?.initials ?? '', style: theme.textTheme.labelMedium),
         ),
+      ),
+    );
+  }
+}
+
+/// The navigation on wide windows, after shadcn's sidebar: the app's name,
+/// its sections with how much is in each, and every project, so moving
+/// between projects is one click.
+class _Sidebar extends ConsumerWidget {
+  const _Sidebar({
+    required this.selected,
+    required this.onSelect,
+    required this.projectId,
+    required this.invites,
+  });
+
+  /// The section showing, as an index into [_destinations].
+  final int selected;
+  final ValueChanged<int> onSelect;
+
+  /// The project whose page is showing, if one is.
+  final String? projectId;
+
+  /// Invites waiting, shown on "Shared".
+  final int invites;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final projects = ref.watch(projectsProvider).value ?? const <Project>[];
+    final openTasks = ref
+        .watch(visibleTasksProvider)
+        .value
+        ?.where((item) => !item.task.isComplete)
+        .length;
+    // How much is in each section, where it's worth saying.
+    final counts = [null, projects.length, openTasks, null];
+
+    return Material(
+      color: colors.surfaceContainerLow,
+      child: SizedBox(
+        width: 264,
+        child: SafeArea(
+          right: false,
+          child: ListView(
+            padding: const EdgeInsets.all(AppSpacing.sm),
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.sm,
+                  AppSpacing.sm,
+                  AppSpacing.sm,
+                  AppSpacing.md,
+                ),
+                child: Row(
+                  children: [
+                    const TasklyLogo(),
+                    const SizedBox(width: AppSpacing.md - 4),
+                    Text(
+                      'Taskly',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              for (final (i, d) in _destinations.indexed)
+                _SidebarItem(
+                  // On a project's page, the project is what's selected.
+                  selected: i == selected && projectId == null,
+                  leading: Icon(
+                    i == selected ? d.selectedIcon : d.icon,
+                    size: 20,
+                  ),
+                  label: d.label,
+                  trailing: switch ((i, counts[i])) {
+                    (_sharedIndex, _) when invites > 0 => Badge.count(
+                      count: invites,
+                    ),
+                    (_, final count?) when count > 0 => _Count(count),
+                    _ => null,
+                  },
+                  semanticsLabel: switch ((i, counts[i])) {
+                    (_sharedIndex, _) when invites > 0 =>
+                      '${d.label}, $invites waiting',
+                    (_, final count?) when count > 0 => '${d.label}, $count',
+                    _ => d.label,
+                  },
+                  onTap: () => onSelect(i),
+                ),
+              const SizedBox(height: AppSpacing.md),
+              Padding(
+                padding: const EdgeInsets.only(left: AppSpacing.sm + 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Semantics(
+                        header: true,
+                        child: Text(
+                          'Projects',
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: colors.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'New project',
+                      iconSize: 18,
+                      icon: const Icon(Icons.add),
+                      onPressed: () async {
+                        final id = await showProjectForm(context);
+                        if (id != null && context.mounted) {
+                          context.go(Routes.project(id));
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              if (projects.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.sm + 4,
+                    vertical: AppSpacing.xs,
+                  ),
+                  child: Text(
+                    'None yet',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colors.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              for (final project in projects)
+                _ProjectItem(project, selected: project.id == projectId),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A project in the sidebar: a dot in its priority's colour, its name, and
+/// how many of its tasks are still open.
+class _ProjectItem extends ConsumerWidget {
+  const _ProjectItem(this.project, {required this.selected});
+
+  final Project project;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final open = ref
+        .watch(projectTasksProvider(project.id))
+        .value
+        ?.where((task) => !task.isComplete)
+        .length;
+    final color = Theme.of(context)
+        .extension<PriorityColors>()!
+        .of(project.priority);
+    return _SidebarItem(
+      selected: selected,
+      leading: SizedBox(
+        width: 20,
+        child: Center(
+          child: Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: const BorderRadius.all(Radius.circular(3)),
+            ),
+          ),
+        ),
+      ),
+      label: project.name,
+      trailing: open == null || open == 0 ? null : _Count(open),
+      semanticsLabel: switch (open) {
+        null || 0 => 'Project ${project.name}',
+        1 => 'Project ${project.name}, 1 open task',
+        final n => 'Project ${project.name}, $n open tasks',
+      },
+      onTap: () => context.go(Routes.project(project.id)),
+    );
+  }
+}
+
+/// A row in the sidebar: a grey wash and bolder text when it's the one
+/// showing.
+class _SidebarItem extends StatelessWidget {
+  const _SidebarItem({
+    required this.selected,
+    required this.leading,
+    required this.label,
+    required this.semanticsLabel,
+    required this.onTap,
+    this.trailing,
+  });
+
+  final bool selected;
+  final Widget leading;
+  final String label;
+  final String semanticsLabel;
+  final VoidCallback onTap;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    // One node per item, with its own tap: the InkWell's is hidden with the
+    // rest of what's inside.
+    return Semantics(
+      container: true,
+      button: true,
+      selected: selected,
+      label: semanticsLabel,
+      onTap: onTap,
+      excludeSemantics: true,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 2),
+        child: Material(
+          color: selected ? colors.surfaceContainerHigh : Colors.transparent,
+          borderRadius: AppRadius.smAll,
+          child: InkWell(
+            borderRadius: AppRadius.smAll,
+            onTap: onTap,
+            child: ConstrainedBox(
+              // The smallest comfortable tap target.
+              constraints: const BoxConstraints(minHeight: 48),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.sm + 4,
+                ),
+                child: Row(
+                  children: [
+                    IconTheme.merge(
+                      data: IconThemeData(
+                        color: selected
+                            ? colors.primary
+                            : colors.onSurfaceVariant,
+                      ),
+                      child: leading,
+                    ),
+                    const SizedBox(width: AppSpacing.md - 4),
+                    Expanded(
+                      child: Text(
+                        label,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: selected ? FontWeight.w600 : null,
+                        ),
+                      ),
+                    ),
+                    ?trailing,
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// How many things are in a sidebar item.
+class _Count extends StatelessWidget {
+  const _Count(this.count);
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Text(
+      '$count',
+      style: theme.textTheme.labelMedium?.copyWith(
+        color: theme.colorScheme.onSurfaceVariant,
+        fontFeatures: const [FontFeature.tabularFigures()],
       ),
     );
   }
