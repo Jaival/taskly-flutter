@@ -257,16 +257,20 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(CheckboxMenuButton, 'Today'));
       await tester.pumpAndSettle();
-      // Tap outside the menu: the app bar, which does nothing itself.
-      await tester.tapAt(const Offset(200, 20));
+      // Tap outside the menu: the app bar's corner, which does nothing.
+      await tester.tapAt(const Offset(4, 4));
       await tester.pumpAndSettle();
       expect(find.text('Book the venue'), findsNothing);
 
       await tester.tap(find.byTooltip('Show as a calendar'));
       await tester.pumpAndSettle();
 
-      expect(find.byTooltip('Sort'), findsNothing);
       expect(find.byTooltip('Filter by due'), findsNothing);
+      await tester.tap(find.byTooltip('View options'));
+      await tester.pumpAndSettle();
+      expect(find.text('Sort by'), findsNothing);
+      await tester.tapAt(const Offset(4, 4));
+      await tester.pumpAndSettle();
       expect(find.byTooltip('Filter by priority'), findsOneWidget);
       // The other day's task is on the calendar all the same.
       expect(find.textContaining('Showing'), findsNothing);

@@ -308,7 +308,7 @@ void main() {
         );
 
     Future<void> export(WidgetTester tester, String format) async {
-      await tester.tap(find.byTooltip('Export these tasks'));
+      await tester.tap(find.byTooltip('View options'));
       await tester.pumpAndSettle();
       await tester.tap(find.text(format));
       await tester.pumpAndSettle();
@@ -319,7 +319,7 @@ void main() {
       await seedTask('b', title: 'Sometime');
       await pumpTasks(tester);
 
-      await export(tester, 'Spreadsheet (.csv)');
+      await export(tester, 'Export spreadsheet (.csv)');
 
       final file = saved.single;
       expect(
@@ -341,7 +341,7 @@ void main() {
       await seedTask('b', title: 'Sometime');
       await pumpTasks(tester);
 
-      await export(tester, 'Calendar (.ics)');
+      await export(tester, 'Export calendar (.ics)');
 
       final file = saved.single;
       expect(file.name, endsWith('.ics'));
@@ -360,7 +360,7 @@ void main() {
       await seedTask('a', title: 'Sometime');
       await pumpTasks(tester);
 
-      await export(tester, 'Calendar (.ics)');
+      await export(tester, 'Export calendar (.ics)');
 
       expect(saved, isEmpty);
       expect(
@@ -376,7 +376,7 @@ void main() {
       await tester.enterText(find.byType(TextField), 'invoice');
       await tester.pumpAndSettle();
 
-      await export(tester, 'Spreadsheet (.csv)');
+      await export(tester, 'Export spreadsheet (.csv)');
 
       expect(saved.single.text, contains('Send the invoice'));
       expect(saved.single.text, isNot(contains('Call the printer')));
@@ -387,7 +387,7 @@ void main() {
       await seedTask('a', title: 'Send the invoice');
       await pumpTasks(tester, saveFile: (file) async => false);
 
-      await export(tester, 'Spreadsheet (.csv)');
+      await export(tester, 'Export spreadsheet (.csv)');
 
       expect(find.byType(SnackBar), findsNothing);
     });
@@ -399,7 +399,7 @@ void main() {
         saveFile: (file) async => throw StateError('no share sheet'),
       );
 
-      await export(tester, 'Spreadsheet (.csv)');
+      await export(tester, 'Export spreadsheet (.csv)');
 
       expect(
         find.text("Couldn't export the tasks. Please try again."),

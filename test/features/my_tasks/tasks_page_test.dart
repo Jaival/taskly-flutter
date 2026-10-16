@@ -413,7 +413,7 @@ void main() {
     await tester.tap(find.widgetWithText(CheckboxMenuButton, option));
     await tester.pumpAndSettle();
     // Tap outside it: the app bar, which does nothing itself.
-    await tester.tapAt(const Offset(200, 20));
+    await tester.tapAt(const Offset(4, 4));
     await tester.pumpAndSettle();
   }
 
@@ -492,14 +492,13 @@ void main() {
       await pumpTasks(tester);
       expect(find.text('Upcoming · 1'), findsOneWidget);
 
-      await tester.tap(find.byTooltip('Sort'));
+      await tester.tap(find.byTooltip('View options'));
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(MenuItemButton, 'Priority'));
       await tester.pumpAndSettle();
 
       expect(shownTitles(tester), ['Call mum', 'Pay rent', 'Soon', 'Buy milk']);
       expect(find.text('Upcoming · 1'), findsNothing);
-      expect(find.text('Sort: Priority'), findsOneWidget);
     });
 
     testWidgets('filters are kept when you come back to the page', (

@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/error_state.dart';
-import '../../../core/widgets/undo_delete.dart';
 import '../../auth/data/auth_repository.dart';
 import '../../projects/data/project_repository.dart';
 import '../../tasks/data/task_repository.dart';
@@ -18,17 +17,18 @@ import '../domain/task_filter.dart';
 import 'my_task_card.dart';
 import 'task_calendar.dart';
 import 'task_filter_bar.dart';
+import 'visible_tasks.dart';
 
 /// `/tasks`: the user's personal tasks and the project tasks assigned to
-/// them, to search, filter and sort. Grouped by when they're due unless
+/// them, to filter. Search, sort and export are in the app bar (see
+/// `tasks_app_bar.dart`). Grouped by when they're due unless
 /// sorted otherwise, or laid out on a calendar.
 class TasksPage extends ConsumerWidget {
   const TasksPage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final hidden = ref.watch(pendingDeletionsProvider);
-    final items = ref.watch(myTasksProvider);
+    final items = ref.watch(visibleTasksProvider);
 
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
@@ -44,10 +44,7 @@ class TasksPage extends ConsumerWidget {
         label: const Text('New task'),
       ),
       body: switch (items) {
-        AsyncData(:final value) => switch ([
-          for (final item in value)
-            if (!hidden.contains(taskDeletionKey(item.task))) item,
-        ]) {
+        AsyncData(:final value) => switch (value) {
           [] => EmptyState(
             icon: Icons.task_alt_outlined,
             title: 'No tasks yet',
@@ -86,10 +83,7 @@ class _FilteredTasks extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final calendar = ref.watch(tasksViewProvider) == TasksView.calendar;
-    final filter = switch (ref.watch(taskFilterProvider)) {
-      final filter when calendar => filter.withoutDue(),
-      final filter => filter,
-    };
+    final filter = ref.watch(activeTaskFilterProvider);
     final uid = ref.watch(currentUserProvider)?.uid ?? '';
     final projects = ref.watch(projectsProvider).value ?? const [];
     final today = DateTime.now();
