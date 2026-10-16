@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../core/data/web_app.dart';
 import '../core/widgets/offline_banner.dart';
+import '../core/widgets/taskly_logo.dart';
 import '../core/widgets/update_banner.dart';
 import '../features/auth/data/auth_repository.dart';
 import '../features/auth/presentation/verify_email_banner.dart';
@@ -289,19 +290,7 @@ class _Sidebar extends ConsumerWidget {
                 ),
                 child: Row(
                   children: [
-                    Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: colors.primary,
-                        borderRadius: AppRadius.smAll,
-                      ),
-                      child: Icon(
-                        Icons.task_alt,
-                        size: 20,
-                        color: colors.onPrimary,
-                      ),
-                    ),
+                    const TasklyLogo(),
                     const SizedBox(width: AppSpacing.md - 4),
                     Text(
                       'Taskly',

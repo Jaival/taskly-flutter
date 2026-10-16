@@ -3,6 +3,7 @@ import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:taskly/app/router.dart';
+import 'package:taskly/core/widgets/taskly_logo.dart';
 import 'package:taskly/features/home/presentation/home_page.dart';
 import 'package:taskly/features/profile/presentation/profile_page.dart';
 import 'package:taskly/features/projects/presentation/project_detail_page.dart';
@@ -53,6 +54,7 @@ void main() {
 
   testWidgets('desktops get a sidebar with the projects in it', (tester) async {
     await pumpApp(tester, user: testUser, size: const Size(1400, 900));
+    expect(find.byType(TasklyLogo), findsOneWidget);
     expect(find.byTooltip('New project'), findsOneWidget);
     expect(find.text('None yet'), findsOneWidget);
     expect(find.byType(NavigationRail), findsNothing);
