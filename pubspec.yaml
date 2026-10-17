@@ -2,7 +2,9 @@ name: taskly
 description: A task and project manager built with Flutter and Firebase.
 publish_to: 'none'
 
-version: 2.1.0+2
+# Set by the release PR that release-please opens; don't edit it by hand. CI
+# adds the build number (the count of commits) to every release build.
+version: 2.1.0
 
 environment:
   sdk: ^3.13.0

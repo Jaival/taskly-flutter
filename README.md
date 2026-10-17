@@ -52,7 +52,7 @@ Taskly started as an internship project in 2021. Version 2 is a rewrite on curre
 | Backend | Firebase Authentication and Cloud Firestore, with [security rules](firestore.rules) as the access control |
 | Offline and install | Firestore's on-device cache, and a [service worker](web/sw.js) of its own |
 | Tests | Unit and widget tests, an integration test against the Firebase emulators, rules tests in Node |
-| CI/CD | GitHub Actions: format, analyze, all the tests and a WebAssembly build on every PR; deploys to GitHub Pages from `main`; a `v*` tag builds Android, iOS, macOS, Windows and web and publishes them as a GitHub Release |
+| CI/CD | GitHub Actions: format, analyze, all the tests and a WebAssembly build on every PR; deploys to GitHub Pages from `main`; release-please turns Conventional Commits into a release PR; merging it builds Android, iOS, macOS, Windows and web and publishes them as a GitHub Release, each file with a signed build provenance attestation |
 
 The code is organised by feature (`lib/features/tasks`, `lib/features/projects`, …), each split into `domain`, `data` and `presentation`. [devops.md](devops.md) walks through it.
 
@@ -96,6 +96,16 @@ flutter test integration_test -d <device> --dart-define=USE_FIREBASE_EMULATORS=t
 ```
 
 [devops.md, section 6](devops.md#6-testing) covers what each suite proves, and how to run the integration test in Chrome.
+
+## Contributing
+
+Changes go through a pull request against `main`. Releases are made from the commit messages, so a few conventions matter:
+
+- **Branches:** `<type>/<short-description>`, lowercase with hyphens, such as `feat/quick-add`, `fix/42-calendar-timezone` or `docs/readme-screenshots`.
+- **Commits:** [Conventional Commits](https://www.conventionalcommits.org/), `<type>(<scope>): <summary>`, such as `feat(tasks): add quick add to the Tasks page` or `fix(offline): keep edits made while offline after a reload`. `feat` makes a minor release, `fix` and `perf` a patch, and a `!` (`feat!:`) or a `BREAKING CHANGE:` footer a major one. `docs`, `refactor`, `test`, `build`, `ci`, `style` and `chore` don't release anything. CI checks every commit in a PR.
+- **Changelog:** [`CHANGELOG.md`](CHANGELOG.md) is written by release-please from the `feat` and `fix` commits, so don't edit it in a feature PR.
+
+[devops.md, section 8](devops.md#branches-commits-and-the-changelog) has the full guide: every type and scope, examples, how to fix a message CI rejects, and how releases work.
 
 ## Project status
 
