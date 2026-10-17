@@ -705,6 +705,7 @@ Someone who signs in with Google has no Taskly password. `AppUser.hasPassword` i
 - **`actions/cache` for `~/.cache/firebase/emulators`:** the Firestore emulator is a large download; caching it makes the rules job much faster after the first run.
 - **`npm ci` (not `npm install`):** installs exactly what `package-lock.json` says and fails if it's out of date. It's the npm version of committing `pubspec.lock`.
 - **`dart format --set-exit-if-changed`:** fails if any file isn't formatted. Run `dart format lib test` before pushing.
+- **Commit messages (PRs only):** every commit has to start with a type like `feat:` or `fix:`, because releases are worked out from them. See "Releases" below. It isn't in deploy's `needs`, because it doesn't run on pushes to `main` and a skipped job would skip the deploy too.
 
 ### GitHub Pages specifics
 
@@ -716,32 +717,56 @@ Someone who signs in with Google has no Taskly password. `AppUser.hasPassword` i
 
 ### Releases
 
-[`.github/workflows/release.yml`](.github/workflows/release.yml) builds the app for every platform and publishes a **GitHub Release** with the files attached. It runs when a tag starting with `v` is pushed:
+Releases are made by [release-please](https://github.com/googleapis/release-please), from the commit messages. Nobody edits a version number or pushes a tag by hand.
 
-1. Bump `version:` in `pubspec.yaml`, for example `2.0.0+1` → `2.1.0+2`. The part after `+` must go up on every release: Android and iOS refuse an update with a build number they've already seen.
-2. Commit it, merge it to `main`, then tag that commit and push the tag:
-   ```
-   git tag v2.1.0
-   git push origin v2.1.0
-   ```
-   The tag has to match the version (`v` + the part before `+`), or the workflow stops at once. A version with a hyphen, like `2.1.0-beta.1`, becomes a pre-release.
+**1. Write commit messages that say what kind of change they are** ([Conventional Commits](https://www.conventionalcommits.org/)):
+
+| Commit message | Next version from 2.1.0 | In the changelog |
+|---|---|---|
+| `fix: keep edits made offline` | 2.1.1 | Bug Fixes |
+| `feat: add labels to tasks` | 2.2.0 | Features |
+| `feat!: drop the v1 data format`, or a `BREAKING CHANGE:` line in the body | 3.0.0 | ⚠ Breaking Changes |
+| `docs:`, `refactor:`, `test:`, `build:`, `ci:`, `chore:`, `style:` | no release on their own | hidden |
+
+A scope in brackets is optional: `fix(sync): …`. The **Commit messages** job in CI fails a PR with a commit that doesn't follow this. To fix one, `git commit --amend` (the last commit) or `git rebase -i` (older ones), then force-push the branch.
+
+**2. release-please keeps a release PR open.** On every push to `main`, [`.github/workflows/release.yml`](.github/workflows/release.yml) opens or updates a PR called *chore(main): release 2.2.0*. It sets `version:` in `pubspec.yaml`, adds the new section to `CHANGELOG.md`, and updates `.release-please-manifest.json`, which records the last version released. Its settings are in `release-please-config.json`.
+
+**3. Release it.** Either:
+
+- merge the release PR, or
+- **Actions → Release → Run workflow** with the version left empty. This merges the release PR and releases it in one click (or one command: `gh workflow run release.yml`).
+
+Then release-please tags the merge commit (`v2.2.0`) and makes a **draft** GitHub Release with the changelog as its notes. [`build.yml`](.github/workflows/build.yml) builds every platform, and the release gets the files and is published.
+
+**Picking the version yourself:** Run workflow with a version, like `3.0.0` or `3.0.0-beta.1`. This adds an empty commit to `main` with the line `Release-As: 3.0.0`, and the release PR switches to that version. Release it as above. A version with a hyphen becomes a pre-release.
 
 ```
- push tag v2.1.0
-        │
- ┌── prepare ──┐   tag == pubspec version?
-        │
- ┌── test ─────┬── android ──┬── ios ─────┬── macos ────┬── windows ──┬── web ──┐   (all in parallel)
- │ analyze,    │ .apk, .aab  │ .ipa       │ .dmg        │ .zip        │ .zip    │
- │ flutter test│ ubuntu      │ macOS      │ macOS       │ Windows     │ ubuntu  │
- └─────────────┴─────────────┴────────────┴─────────────┴─────────────┴─────────┘
-        │ only if every job passed
- ┌── publish ──┐   gh release create v2.1.0 + all files, notes from the merged PRs
+ push to main ─┐                      Run workflow (version empty) ─┐
+               ▼                                                    ▼
+ ┌── release-please ──────────────────────────────────────────────────────┐
+ │ no release PR merged:  open/update "chore(main): release 2.2.0"        │
+ │ release PR merged:     tag v2.2.0, draft GitHub Release with notes     │
+ └──────────────────────────────┬─────────────────────────────────────────┘
+                                │ only when it made a release
+ ┌── test ─────┬── build.yml: android ── ios ── macos ── windows ── web ──┐   (all in parallel)
+ │ analyze,    │ .apk .aab    .ipa     .dmg     .zip       .zip         │
+ │ flutter test│ built as 2.2.0, build number = commits so far          │
+ └─────────────┴─────────────────────────────────────────────────────────┘
+                                │ only if every job passed
+ ┌── publish ──┐   upload the files, title "Taskly 2.2.0", draft → published
 ```
 
-**Actions → Release → Run workflow** runs everything except publishing. Use it to try the pipeline, or a new secret, without making a release; the files are on the run's page under *Artifacts*.
+Why it's put together this way:
 
-Each job builds on a machine with that platform's tools: iOS and macOS need Xcode, so they run on GitHub's Macs. `permissions: contents: write`, which creating a release needs, is given only to the publish job.
+- **The version comes from the release, not from a hand edit.** release-please works out the version, and the builds get it as `--build-name`. The **build number** (`--build-number`, the Android version code) is the number of commits on `main`, from `git rev-list --count`. It goes up on every release by itself, and the same commit always gets the same number. That's why `pubspec.yaml` has no `+N`: a local build gets build number 1, which is fine for trying things out.
+- **The build is a reusable workflow.** `build.yml` runs with `on: workflow_call`, so the release calls it, and you can also run it on its own with **Actions → Build → Run workflow** to build any branch without publishing anything. Use that to try the pipeline, or a new secret; the files are on the run's page under *Artifacts*.
+- **The release starts as a draft**, so nobody sees a release without its files. If a build fails, open the run and **Re-run failed jobs**: the draft waits. `force-tag-creation` in the config makes the tag exist right away anyway, because GitHub only tags a draft when it's published, and without a tag release-please can't find the last release.
+- **Everything runs with the workflow's own `GITHUB_TOKEN`**, so there's no personal token to store or renew. The catch: GitHub doesn't start workflows for things that token does, so CI doesn't run on the release PR (it only changes the version and the changelog), and a release PR merged with Run workflow doesn't redeploy GitHub Pages. For both, switch to a GitHub App token ([`actions/create-github-app-token`](https://github.com/actions/create-github-app-token)) passed to release-please as `token:`.
+- **Commits made by the workflow are signed by GitHub.** The release PR's commit and the `Release-As` commit are made through the API, so they show as *Verified* without anyone's own key.
+- **One-time setup:** Settings → Actions → General → Workflow permissions → **Allow GitHub Actions to create and approve pull requests** has to be on, so release-please can open its PR.
+
+Each job builds on a machine with that platform's tools: iOS and macOS need Xcode, so they run on GitHub's Macs. Write permissions go only to the two jobs that need them: release-please (`contents`, `pull-requests` and `issues`, for the PR, its labels and the tag) and publish (`contents`, for the release). The builds, which run the most third-party code, can only read.
 
 #### Signing secrets
 
@@ -786,7 +811,7 @@ What the workflow does with them, so a failure makes sense:
 - **`tool/ci/sign_xcode_target.rb`** switches the Runner target's Release configuration to manual signing with them. The checked-in projects stay on automatic signing with no team, so they still build on any Mac. The setting has to go on the target: on the `xcodebuild` command line it would reach every Swift package too, and those can't take a provisioning profile.
 - **macOS only:** the build adds Keychain Sharing to `Release.entitlements`, signs the app again with the *hardened runtime* and a secure timestamp (both required for notarization), packs it in a `.dmg`, and sends that to Apple. Notarization takes a few minutes; `notarytool` waits for it, and prints Apple's log if it's refused. Then `stapler` attaches the ticket to the `.dmg`, so it opens without asking Apple first.
 
-None of the Apple signing could be tried from a Windows machine, so expect the first signed run to need a fix or two. **Run workflow** is the way to find out without a release.
+None of the Apple signing could be tried from a Windows machine, so expect the first signed run to need a fix or two. **Actions → Build → Run workflow** is the way to find out without a release.
 
 ### Branching workflow
 
@@ -836,7 +861,7 @@ Hot reload: while `flutter run` is running, press `r` to reload code changes in 
 
 `android/app/build.gradle.kts` reads `key.properties` if it exists and signs with that key. If it doesn't, release builds are signed with the debug key, so `flutter run --release` still works on any machine, but the Play Store refuses such a build.
 
-Each upload needs a higher **version code** than the last: that's the number after the `+` in `version: 2.0.0+1` in `pubspec.yaml`.
+Each upload needs a higher **version code** than the last. Release builds get the number of commits as their version code (see 8, "Releases"), so it always goes up. A local build has version code 1 unless you pass `--build-number`.
 
 Two things that only show up in release builds:
 

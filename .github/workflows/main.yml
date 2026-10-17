@@ -31,6 +31,31 @@ jobs:
       - run: flutter analyze
       - run: flutter test
 
+  # release-please works out the next version and the changelog from these,
+  # so each commit in a PR has to start with a type, like "feat: add labels"
+  # or "fix(sync): keep edits made offline". See devops.md 8, "Releases".
+  commits:
+    name: Commit messages
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          types='feat|fix|perf|revert|docs|refactor|test|build|ci|chore|style'
+          bad=0
+          while IFS= read -r subject; do
+            if ! echo "$subject" | grep -Eq "^($types)(\([a-z0-9_-]+\))?!?: .+"; then
+              echo "::error::\"$subject\" should start with one of $types, like \"feat: add labels\"."
+              bad=1
+            fi
+          done < <(git log --no-merges --format=%s "$BASE..$HEAD")
+          exit $bad
+
   rules:
     name: Firestore rules
     runs-on: ubuntu-latest
