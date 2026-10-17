@@ -4,7 +4,7 @@ A task and project manager for small teams, built with Flutter and Firebase. Pla
 
 **Try it:** [jaival.github.io/taskly-flutter](https://jaival.github.io/taskly-flutter/)
 
-![Home: counts, tasks done this week, what's next and recent projects](docs/screenshots/home.webp)
+![Home: the sidebar with every project, counts, tasks done this week, what's next and recent projects](docs/screenshots/home.webp)
 
 Taskly started as an internship project in 2021. Version 2 is a rewrite on current Flutter, Dart 3 and Firebase, one feature at a time. [ROADMAP.md](ROADMAP.md) tells that story, and [devops.md](devops.md) explains how it's built and why.
 
@@ -30,13 +30,17 @@ Taskly started as an internship project in 2021. Version 2 is a rewrite on curre
 - Installs as an app from the browser, and offers new versions without interrupting you.
 - Six colour themes, or your phone's own colours (Material You on Android 12+), each in light and dark, picked in Settings. Keyboard shortcuts, screen-reader labels, and text that scales to 200%.
 
-| Board | Tasks, in dark mode |
+| Board | Quick add, in dark mode |
 |---|---|
-| ![A project's board: Not started, In progress and Complete columns](docs/screenshots/board.webp) | ![The Tasks page grouped by due date, with filters](docs/screenshots/tasks-dark.webp) |
+| ![A project's board: Not started, In progress and Complete columns](docs/screenshots/board.webp) | ![Typing "Renew domain next friday !urgent #work" in quick add, with the date, priority and label it found highlighted](docs/screenshots/tasks-dark.webp) |
 
 | Calendar | On a phone |
 |---|---|
 | ![The Tasks page as a month calendar](docs/screenshots/calendar.webp) | ![A project on Android](docs/screenshots/phone-project.webp) |
+
+| Colour themes |
+|---|
+| ![Settings: light, dark or system, and six colour themes](docs/screenshots/settings.webp) |
 
 ## Tech stack
 
