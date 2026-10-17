@@ -365,6 +365,7 @@ Tier A is what makes this feel like a real product. The rest is optional.
   - Passed on the Android emulator (twice in a row, about 30 seconds) and in headless Chrome, including the CI command run while logged out of Firebase.
 - [x] **CI:** analyze, test, and `flutter build web --wasm` on every PR. Deploy only from `main`.
 - [x] **Releases:** pushing a `v*` tag builds every platform and publishes a GitHub Release (`.github/workflows/release.yml`, devops.md 8).
+- [x] **Conventions:** branch names, Conventional Commits and the changelog are written down (see "Working conventions" below, devops.md 8), and `CHANGELOG.md` covers every release so far.
 - [x] **Automated releases:** release-please keeps a release PR with the version and changelog from Conventional Commits; merging it (or Actions → Release → Run workflow) tags, builds with the reusable `build.yml`, and publishes. The build number is the commit count.
 - [ ] **You:** add the signing secrets (devops.md 8, "Signing secrets"), then try a signed build with Actions → Build → Run workflow.
   - Every PR runs: format, analyze and the Dart tests; the rules tests; the service worker tests; the integration test in Chrome; and a WebAssembly build. Deploying to GitHub Pages happens only on `main`, and only when all of them pass.
@@ -375,6 +376,18 @@ Tier A is what makes this feel like a real product. The rest is optional.
   - Rewritten from the 2021 placeholder: what Taskly is and a link to the live site, the features, five screenshots (light and dark, desktop and phone), the tech stack, running it against the emulators or your own Firebase project, and the tests.
   - The screenshots are in `docs/screenshots/`, taken from the real app against the emulators with demo data. The README links to the original code through the `v1-internship` tag.
 - [ ] Delete the old `taskly-dc4e2` Firebase project.
+
+---
+
+## Working conventions
+
+These apply to every change from 2.1.0 on, because releases are now worked out from the commit messages (devops.md 8, "Branches, commits and the changelog").
+
+- **Branches:** one per change, named `<type>/<short-description>`: `feat/reminders`, `fix/offline-sync`, `ci/firebase-hosting`. Branch off `main`, open a PR against `main`, delete the branch after merging.
+- **Commits:** Conventional Commits, `<type>(<scope>): <summary>`, with the summary written as the changelog line a user would read. `feat` → minor, `fix`/`perf` → patch, `!` or `BREAKING CHANGE:` → major. The **Commit messages** job in CI rejects anything else.
+- **Merging:** a merge commit when a PR holds several features with one commit each (each gets a changelog line); squash, with a Conventional PR title, when it does one thing.
+- **Changelog:** written by release-please. `CHANGELOG.md` was filled in by hand for 1.0.0, 2.0.0 and 2.1.0; from 2.2.0 on, each release adds its own section.
+- **Releasing:** merge the release PR, or Actions → Release → Run workflow.
 
 ---
 

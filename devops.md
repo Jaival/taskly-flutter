@@ -830,16 +830,113 @@ What the workflow does with them, so a failure makes sense:
 
 None of the Apple signing could be tried from a Windows machine, so expect the first signed run to need a fix or two. **Actions → Build → Run workflow** is the way to find out without a release.
 
-### Branching workflow
+### Branches, commits and the changelog
+
+Releases are worked out from the commit messages (see "Releases" above), so these conventions do real work. CI checks the commit messages; the branch names are a convention.
+
+#### The flow
 
 ```
-main ─────●────────────────●──────────►   always deployable, auto-deployed
-           \              /
-upgrade     ●──●──●──●──●    ← work here, open a PR, CI checks it, merge
+main ───●───────────●──────────●─────────────●──►  always deployable, auto-deployed
+         \         /  \        /              ↑
+          ●──●──●─┘    ●──●──┘               │ merge it to release
+          feat/labels  fix/offline-sync      release PR, kept up to date by release-please
 ```
 
-- `v1-internship` is a **tag**, a permanent bookmark on the original code. `git checkout v1-internship` shows it at any time.
-- Keep commits small and focused. One feature rewrite = one PR is a good size.
+1. Branch off an up-to-date `main`: `git switch main && git pull && git switch -c feat/quick-add`.
+2. Commit in small steps, each with a Conventional Commit message.
+3. Push and open a PR against `main`. CI runs every check, including **Commit messages**.
+4. Merge it. Which button matters, because the changelog is made from what lands on `main`:
+   - **Create a merge commit** (what Taskly has used so far): every commit lands as it is, so each `feat:` and `fix:` is its own line in the changelog. Good for a PR that holds several features, one commit each. Every commit message has to be fit for the changelog, including a `fix:` for a bug that only ever existed on the branch.
+   - **Squash and merge** (what release-please recommends): the PR becomes one commit, named after the **PR title**, so give the PR a Conventional Commit title. You get one changelog line per PR, a straight history that `git bisect` can walk, and fixable notes (`BEGIN_COMMIT_OVERRIDE`, below). Best for a PR that does one thing.
+5. Delete the branch. When you want to release, merge the release PR (see "Releases").
+
+#### Naming branches
+
+`<type>/<short-description>`, all lowercase, words joined with hyphens:
+
+| Branch | For |
+|---|---|
+| `feat/quick-add` | a new feature |
+| `fix/offline-sync` | a bug fix |
+| `fix/42-calendar-timezone` | a fix for issue #42: the number goes first |
+| `docs/readme-screenshots` | documentation only |
+| `refactor/task-repository` | restructuring that doesn't change behaviour |
+| `test/sharing-rules` | tests only |
+| `perf/board-drag` | faster, same behaviour |
+| `ci/release-please` | workflows and the pipeline |
+| `build/flutter-3-48` | the toolchain, dependencies and platform folders |
+| `chore/delete-old-firebase-project` | anything else that isn't user-facing |
+
+- The type is the same word the commits on it start with, so the branch name says what the PR will do to the version.
+- Keep it short: two to four words is enough. The PR explains the rest.
+- Don't use your name, a date or `wip`, and don't reuse a branch after it's merged; start a new one.
+- `release-please--branches--main` belongs to release-please. Don't push to it: it rewrites that branch on every run.
+- `v1-internship`, `v2.0.0`, … are **tags**, not branches: permanent bookmarks on a release. `git checkout v1-internship` shows the original 2021 code at any time.
+
+#### Writing commit messages
+
+```
+<type>(<optional scope>)<optional !>: <summary>
+
+<optional body: what changed and why, wrapped at 72 columns>
+
+<optional footers: BREAKING CHANGE: …, Refs: #42, Co-authored-by: …>
+```
+
+| Type | Use it for | Release | Changelog |
+|---|---|---|---|
+| `feat` | something new a user can see or do | minor (2.1.0 → 2.2.0) | Features |
+| `fix` | a bug a user could hit | patch (2.1.0 → 2.1.1) | Bug Fixes |
+| `perf` | the same thing, faster | patch | Performance |
+| `revert` | undoing an earlier commit | patch | Reverts |
+| `docs` | README, devops.md, comments | none | hidden |
+| `refactor` | restructuring with no change in behaviour | none | hidden |
+| `test` | adding or fixing tests | none | hidden |
+| `build` | dependencies, Flutter version, platform folders | none | hidden |
+| `ci` | `.github/workflows`, `tool/ci` | none | hidden |
+| `style` | formatting only | none | hidden |
+| `chore` | anything else | none | hidden |
+
+A `!` after the type, or a `BREAKING CHANGE:` footer, makes it a **major** release (2.1.0 → 3.0.0) whatever the type. Use it when existing data, links or settings stop working, not just because a change is big.
+
+**Scope** (optional) is the part of the app, in lowercase: `auth`, `profile`, `projects`, `tasks`, `home`, `sharing`, `labels`, `calendar`, `settings`, `offline`, `rules`, `web`, `android`, `ios`, `macos`, `windows`, `deps`. It shows in bold in the changelog.
+
+**The summary** is the changelog line, so write it for someone who uses the app:
+
+- Say what changes for the user, in the imperative ("add", not "added" or "adds"), starting in lowercase: `feat(tasks): add quick add to the Tasks page`.
+- Up to about 72 characters, with no full stop at the end.
+- One change per commit. If the summary needs "and", it's probably two commits.
+
+| Instead of | Write |
+|---|---|
+| `Fixed bug` | `fix(offline): keep edits made while offline after a reload` |
+| `feat: update TaskCard widget` | `feat(tasks): show the checklist progress on each task row` |
+| `chore: misc changes` | separate commits, each with its own type |
+| `feat: Add themes.` | `feat(settings): add six colour themes` |
+
+**The body** says *why*, which the diff can't. For example: what was broken and how it showed, or why this approach and not the obvious one. Wrap it at 72 columns.
+
+**Footers** go after a blank line: `BREAKING CHANGE: <what breaks and what to do>`, `Refs: #42` or `Fixes: #42` (GitHub closes the issue on merge), `Co-authored-by: Name <email>`, and `Release-As: 3.0.0` to choose the next version (the Release workflow's Run workflow button adds that for you).
+
+**When the check fails:** `git commit --amend` fixes the last message. For older ones, `git rebase -i main`, mark them `reword`, then `git push --force-with-lease`.
+
+#### The changelog
+
+[`CHANGELOG.md`](CHANGELOG.md) is written by release-please, from the `feat`, `fix`, `perf` and `revert` commits, when it prepares a release PR. Don't edit the release PR or the newest section by hand: release-please rewrites its branch on every run. To change what a release will say:
+
+- **Before it's merged:** reword the commits on your branch (`git rebase -i`), since they're the source.
+- **Already on `main`, not released yet:** for a PR that was **squash-merged**, edit that PR's description and add the corrected messages. release-please uses them on its next run instead of the commit:
+  ```
+  BEGIN_COMMIT_OVERRIDE
+  feat(tasks): add quick add to the Tasks page
+  fix(tasks): keep the quick add text after an error
+  END_COMMIT_OVERRIDE
+  ```
+  This doesn't work for merge commits, because release-please can't tell which of the PR's commits to replace. For those, fix the wording after the release.
+- **After release:** edit `CHANGELOG.md` and the GitHub Release notes in a normal `docs:` PR. release-please only ever adds new sections at the top, so older ones stay as you leave them.
+
+The sections for 1.0.0 to 2.1.0 were written by hand when release-please was set up, from the history behind each tag.
 
 ---
 

@@ -97,6 +97,16 @@ flutter test integration_test -d <device> --dart-define=USE_FIREBASE_EMULATORS=t
 
 [devops.md, section 6](devops.md#6-testing) covers what each suite proves, and how to run the integration test in Chrome.
 
+## Contributing
+
+Changes go through a pull request against `main`. Releases are made from the commit messages, so a few conventions matter:
+
+- **Branches:** `<type>/<short-description>`, lowercase with hyphens, such as `feat/quick-add`, `fix/42-calendar-timezone` or `docs/readme-screenshots`.
+- **Commits:** [Conventional Commits](https://www.conventionalcommits.org/), `<type>(<scope>): <summary>`, such as `feat(tasks): add quick add to the Tasks page` or `fix(offline): keep edits made while offline after a reload`. `feat` makes a minor release, `fix` and `perf` a patch, and a `!` (`feat!:`) or a `BREAKING CHANGE:` footer a major one. `docs`, `refactor`, `test`, `build`, `ci`, `style` and `chore` don't release anything. CI checks every commit in a PR.
+- **Changelog:** [`CHANGELOG.md`](CHANGELOG.md) is written by release-please from the `feat` and `fix` commits, so don't edit it in a feature PR.
+
+[devops.md, section 8](devops.md#branches-commits-and-the-changelog) has the full guide: every type and scope, examples, how to fix a message CI rejects, and how releases work.
+
 ## Project status
 
 Everything in v1 has been rebuilt, plus the new features above. Still to come ([ROADMAP.md](ROADMAP.md)):
