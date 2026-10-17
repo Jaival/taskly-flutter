@@ -16,10 +16,19 @@ on:
         description: The commit to build. Defaults to the one that started the workflow.
         type: string
         default: ''
+      attest:
+        description: Sign a build provenance attestation for every file, for a release.
+        type: boolean
+        default: false
   workflow_dispatch:
 
+# id-token lets a job ask Sigstore for a signing certificate, and the other
+# two store the attestation with GitHub. A caller has to grant them too.
 permissions:
   contents: read
+  id-token: write
+  attestations: write
+  artifact-metadata: write
 
 env:
   FLUTTER_VERSION: 3.47.5
@@ -28,6 +37,8 @@ jobs:
   prepare:
     name: Version
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       version: ${{ steps.version.outputs.version }}
       build-number: ${{ steps.version.outputs.build-number }}
@@ -96,6 +107,16 @@ jobs:
           mkdir dist
           mv build/app/outputs/flutter-apk/app-release.apk "dist/taskly-$VERSION-android.apk"
           mv build/app/outputs/bundle/release/app-release.aab "dist/taskly-$VERSION-android.aab"
+      # A signed statement that this repo's build.yml made these files, from
+      # which commit. Check a download with: gh attestation verify <file>
+      # --repo Jaival/taskly-flutter --signer-workflow
+      # Jaival/taskly-flutter/.github/workflows/build.yml
+      # In each job it comes last, after anything that changes the files, like
+      # stapling the .dmg.
+      - uses: actions/attest@v4
+        if: inputs.attest
+        with:
+          subject-path: dist/*
       - uses: actions/upload-artifact@v7
         with:
           name: android
@@ -159,6 +180,10 @@ jobs:
           mkdir -p dist "$RUNNER_TEMP/ipa/Payload"
           cp -R build/ios/iphoneos/Runner.app "$RUNNER_TEMP/ipa/Payload/"
           (cd "$RUNNER_TEMP/ipa" && zip -qr - Payload) > "dist/taskly-$VERSION-ios-unsigned.ipa"
+      - uses: actions/attest@v4
+        if: inputs.attest
+        with:
+          subject-path: dist/*
       - uses: actions/upload-artifact@v7
         with:
           name: ios
@@ -261,6 +286,10 @@ jobs:
           flutter build macos --release --build-name="$VERSION" --build-number="$BUILD_NUMBER"
           mkdir dist
           ditto -c -k --keepParent build/macos/Build/Products/Release/taskly.app "dist/taskly-$VERSION-macos-unsigned.zip"
+      - uses: actions/attest@v4
+        if: inputs.attest
+        with:
+          subject-path: dist/*
       - uses: actions/upload-artifact@v7
         with:
           name: macos
@@ -290,6 +319,10 @@ jobs:
         run: |
           New-Item -ItemType Directory dist | Out-Null
           Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath "dist\taskly-$env:VERSION-windows-x64.zip"
+      - uses: actions/attest@v4
+        if: inputs.attest
+        with:
+          subject-path: dist/*
       - uses: actions/upload-artifact@v7
         with:
           name: windows
@@ -318,6 +351,10 @@ jobs:
       - run: |
           mkdir dist
           (cd build/web && zip -qr - .) > "dist/taskly-$VERSION-web.zip"
+      - uses: actions/attest@v4
+        if: inputs.attest
+        with:
+          subject-path: dist/*
       - uses: actions/upload-artifact@v7
         with:
           name: web

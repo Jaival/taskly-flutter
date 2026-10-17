@@ -766,6 +766,23 @@ Why it's put together this way:
 - **Commits made by the workflow are signed by GitHub.** The release PR's commit and the `Release-As` commit are made through the API, so they show as *Verified* without anyone's own key.
 - **One-time setup:** Settings → Actions → General → Workflow permissions → **Allow GitHub Actions to create and approve pull requests** has to be on, so release-please can open its PR.
 
+#### Checking a download: attestations
+
+Every file in a release comes with a **build provenance attestation**, made by [`actions/attest`](https://github.com/actions/attest) in `build.yml`. It's a signed statement: "the file with this SHA-256 was built by `Jaival/taskly-flutter`'s `build.yml`, at this commit, for this run." Anyone can check a file they downloaded:
+
+```
+gh attestation verify taskly-2.2.0-android.apk --repo Jaival/taskly-flutter   --signer-workflow Jaival/taskly-flutter/.github/workflows/build.yml
+```
+
+It prints the commit and the workflow run the file came from. It fails if even one byte is different, or if the file was built anywhere else, like someone's laptop or a fork.
+
+- **How it's signed:** there's no key to look after. The job proves who it is to [Sigstore](https://www.sigstore.dev/) with its GitHub OIDC token (that's what `id-token: write` is for), and gets a certificate that's valid for a few minutes. For a public repo, the signature is also written to Sigstore's public, append-only transparency log, and the attestation is kept by GitHub (`attestations: write`). They're listed under the repo's **Actions → Attestations**.
+- **Why in `build.yml`, not `release.yml`:** the signer is then the reusable build workflow itself, and `--signer-workflow` checks for exactly that file. A build that can't be changed by whatever calls it is SLSA Build Level 3; attesting in the calling workflow would be Level 2.
+- **Last step in each job:** the hash has to be of the final file, so the attestation comes after anything that changes it, like stapling the notarization ticket to the `.dmg`.
+- **Only for releases:** `release.yml` passes `attest: true`. A build started with Run workflow isn't attested, so test builds can't be mistaken for releases.
+- **What it doesn't do:** it says where a file came from, not that the code is safe. It doesn't replace code signing either: Windows SmartScreen and macOS Gatekeeper don't read it.
+- **Cost:** free for public repos on every plan, and a few seconds per job. Private repos need GitHub Enterprise Cloud.
+
 Each job builds on a machine with that platform's tools: iOS and macOS need Xcode, so they run on GitHub's Macs. Write permissions go only to the two jobs that need them: release-please (`contents`, `pull-requests` and `issues`, for the PR, its labels and the tag) and publish (`contents`, for the release). The builds, which run the most third-party code, can only read.
 
 #### Signing secrets
